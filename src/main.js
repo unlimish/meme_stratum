@@ -6,6 +6,8 @@ import { memeData } from './memeData.js';
 
 // --- Global App State ---
 const state = {
+  currentX: 0,
+  targetX: 0,
   currentZ: 0,
   targetZ: 0,
   timeRange: { min: -520, max: 0 }, // 2000 to 2026. K_z = 20 units per year.
@@ -372,18 +374,46 @@ function initThree() {
   dirLight2.position.set(-5, -5, -15);
   scene.add(dirLight2);
 
+  // Track allocation algorithm to prevent visual overlaps (interval scheduling)
+  const sortedMemes = [...memeData].sort((a, b) => a.bornYear - b.bornYear);
+  const tracks = [];
+  const memeTrackMap = new Map();
+
+  sortedMemes.forEach(meme => {
+    const lengthZ = Math.max(0.8, (meme.diedYear - meme.bornYear) * K_Z);
+    const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
+    const startZ = posZ - (lengthZ / 2);
+
+    let assignedTrack = -1;
+    for (let i = 0; i < tracks.length; i++) {
+      // Allow safety buffer of 5 units between pillars in the same track
+      if (tracks[i] + 5.0 <= startZ) {
+        assignedTrack = i;
+        tracks[i] = posZ + (lengthZ / 2);
+        break;
+      }
+    }
+
+    if (assignedTrack === -1) {
+      tracks.push(posZ + (lengthZ / 2));
+      assignedTrack = tracks.length - 1;
+    }
+    memeTrackMap.set(meme.id, assignedTrack);
+  });
+
+  const numTracks = tracks.length;
+
   // Generate Pillars
   memeData.forEach((meme, index) => {
     // 1. Z-axis mapping
     const lengthZ = Math.max(0.8, (meme.diedYear - meme.bornYear) * K_Z);
-    // Position: Center is offset by (bornYear - 2026) * K_Z + half length
     const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
 
     // 2. Geometry
-    // We stagger them as an alternating left-and-right corridor, closer to center line for readability
-    const staggerX = (index % 2 === 0 ? -1.8 : 1.8);
-    // Keep them at eye-level (y=0) so the user doesn't have to look up or down
-    const staggerY = 0;
+    // Dynamically staggered X lanes based on the non-overlapping track index
+    const trackIndex = memeTrackMap.get(meme.id);
+    const staggerX = (trackIndex - (numTracks - 1) / 2) * 3.5;
+    const staggerY = 0; // eye level
     const geometry = new THREE.BoxGeometry(3, 3, lengthZ);
 
     // 3. Materials
@@ -643,7 +673,10 @@ function animate() {
   requestAnimationFrame(animate);
 
   // Smooth easing for camera position
+  state.currentX = THREE.MathUtils.lerp(state.currentX, state.targetX, 0.06);
   state.currentZ = THREE.MathUtils.lerp(state.currentZ, state.targetZ, 0.08);
+  
+  camera.position.x = state.currentX;
   camera.position.z = state.currentZ + 15; // Maintain a slight offset in front of camera focus
 
   // Update HUD year indicator
@@ -689,16 +722,19 @@ function animate() {
 
   // Track active layer
   let activeMeme = null;
+  let activePillar = null;
   // Look for the meme whose depth coordinates contain the camera position
   for (const pillar of pillars) {
     if (state.currentZ >= pillar.startZ && state.currentZ <= pillar.endZ) {
       activeMeme = pillar.data;
+      activePillar = pillar;
       break;
     }
   }
 
-  // Update Active Meme HUD
+  // Update Active Meme HUD and target camera track X position
   if (activeMeme) {
+    state.targetX = activePillar.mesh.position.x;
     if (state.activeMeme !== activeMeme) {
       state.activeMeme = activeMeme;
       activeMemeEl.textContent = activeMeme.name;
@@ -706,6 +742,7 @@ function animate() {
       activeDurationEl.textContent = `${duration} YEAR${duration > 1 ? 'S' : ''}`;
     }
   } else {
+    state.targetX = 0; // Return to center lane when in empty spaces
     activeMemeEl.textContent = 'TRANSITION SPACE';
     activeDurationEl.textContent = '—';
   }
