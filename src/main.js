@@ -410,9 +410,15 @@ function initThree() {
     const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
 
     // 2. Geometry
-    // Dynamically staggered X lanes based on the non-overlapping track index
+    // We place tracks on the left and right sides of a central corridor (width of 6.4 units)
+    // to prevent camera collisions and keep navigation clean.
     const trackIndex = memeTrackMap.get(meme.id);
-    const staggerX = (trackIndex - (numTracks - 1) / 2) * 3.5;
+    let staggerX = 0;
+    if (trackIndex % 2 === 0) {
+      staggerX = -3.2 - (trackIndex / 2) * 2.2;
+    } else {
+      staggerX = 3.2 + ((trackIndex - 1) / 2) * 2.2;
+    }
     const staggerY = 0; // eye level
     const geometry = new THREE.BoxGeometry(3, 3, lengthZ);
 
@@ -460,11 +466,11 @@ function initThree() {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
-  // BokehPass for Depth of Field (soft/generous sharp zone for readability)
+  // BokehPass for Depth of Field (very soft, subtle blur to keep text readable)
   bokehPass = new BokehPass(scene, camera, {
     focus: 15.0,
-    aperture: 0.003, // Decreased from 0.008 to make the active card very sharp and easy to read
-    maxblur: 0.01,
+    aperture: 0.0012, // Reduced to make the focus zone very wide and legible
+    maxblur: 0.005,  // Softer blur peak
     width: window.innerWidth,
     height: window.innerHeight
   });
@@ -734,7 +740,8 @@ function animate() {
 
   // Update Active Meme HUD and target camera track X position
   if (activeMeme) {
-    state.targetX = activePillar.mesh.position.x;
+    // Lean slightly towards the active track (35% scale) to keep the camera safely in the corridor
+    state.targetX = activePillar.mesh.position.x * 0.35;
     if (state.activeMeme !== activeMeme) {
       state.activeMeme = activeMeme;
       activeMemeEl.textContent = activeMeme.name;
