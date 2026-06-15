@@ -268,7 +268,7 @@ function createPillarMaterials(meme, texture) {
       
       vec3 finalColor = agedColor - vec3(grain) + vec3(scratchPattern);
       
-      float diffuse = max(0.6, dot(vNormal, normalize(vec3(1.0, 2.0, 3.0))));
+      float diffuse = max(0.95, dot(vNormal, normalize(vec3(1.0, 2.0, 3.0))));
       gl_FragColor = vec4(finalColor * diffuse, 1.0);
     }
   `;
@@ -380,9 +380,10 @@ function initThree() {
     const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
 
     // 2. Geometry
-    // We alternate X and Y positions to lay them out dynamically as a gorgeous staggered pathway
-    const staggerX = (index % 3 - 1) * 4.5;
-    const staggerY = ((Math.floor(index / 3) % 2) - 0.5) * 3;
+    // We stagger them as an alternating left-and-right corridor, closer to center line for readability
+    const staggerX = (index % 2 === 0 ? -1.8 : 1.8);
+    // Keep them at eye-level (y=0) so the user doesn't have to look up or down
+    const staggerY = 0;
     const geometry = new THREE.BoxGeometry(3, 3, lengthZ);
 
     // 3. Materials
@@ -429,11 +430,11 @@ function initThree() {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
-  // BokehPass for Depth of Field (wider sharp zone for readability)
+  // BokehPass for Depth of Field (soft/generous sharp zone for readability)
   bokehPass = new BokehPass(scene, camera, {
     focus: 15.0,
-    aperture: 0.008, // Increased from 0.025 to expand the depth of field
-    maxblur: 0.012,
+    aperture: 0.003, // Decreased from 0.008 to make the active card very sharp and easy to read
+    maxblur: 0.01,
     width: window.innerWidth,
     height: window.innerHeight
   });
