@@ -28,86 +28,137 @@ const canvas = document.getElementById('webgl');
 // --- Procedural Canvas Texture Generator ---
 function createMemeTexture(meme) {
   const size = 512;
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.canvas.width = size;
-  ctx.canvas.height = size;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = size;
+  canvas.height = size;
 
-  // Background gradient
-  const grad = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size);
-  grad.addColorStop(0, meme.color);
-  grad.addColorStop(1, '#050505');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  // Stylized background pattern (concentric circles / grid)
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  ctx.lineWidth = 1;
-  for (let r = 50; r < size; r += 40) {
-    ctx.beginPath();
-    ctx.arc(size/2, size/2, r, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // Crosshairs / Tech grid elements
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-  ctx.beginPath();
-  ctx.moveTo(0, size/2); ctx.lineTo(size, size/2);
-  ctx.moveTo(size/2, 0); ctx.lineTo(size/2, size);
-  ctx.stroke();
-
-  // Neon boundary frame
-  ctx.strokeStyle = meme.color;
-  ctx.lineWidth = 6;
-  ctx.strokeRect(10, 10, size - 20, size - 20);
-
-  // Sub-boundary frame
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(16, 16, size - 32, size - 32);
-
-  // TEXT LAYER
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Header
-  ctx.font = 'bold 20px "Outfit", sans-serif';
-  ctx.letterSpacing = '2px';
-  ctx.fillText('MEME LAYER', size/2, 50);
-
-  // Era
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font = '16px "Outfit", sans-serif';
-  ctx.fillText(`ACTIVE ERA: ${meme.bornYear} - ${meme.diedYear}`, size/2, 85);
-
-  // Main Text (Meme representation / punchline)
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 28px "Outfit", sans-serif';
-  
-  // Wrap text if long
-  const words = meme.text.split(' ');
-  let line = '';
-  let y = size/2 - 10;
-  for (let n = 0; n < words.length; n++) {
-    let testLine = line + words[n] + ' ';
-    let metrics = ctx.measureText(testLine);
-    if (metrics.width > size - 80 && n > 0) {
-      ctx.fillText(line, size/2, y);
-      line = words[n] + ' ';
-      y += 36;
-    } else {
-      line = testLine;
-    }
-  }
-  ctx.fillText(line, size/2, y);
-
-  // Footer: Title
-  ctx.fillStyle = meme.color;
-  ctx.font = 'bold 22px "Outfit", sans-serif';
-  ctx.fillText(meme.name.toUpperCase(), size/2, size - 65);
-
-  const texture = new THREE.CanvasTexture(ctx.canvas);
+  const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+
+  function render(image = null) {
+    ctx.clearRect(0, 0, size, size);
+
+    // Background gradient
+    const grad = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size);
+    grad.addColorStop(0, meme.color);
+    grad.addColorStop(1, '#050505');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Draw actual meme image if loaded
+    if (image) {
+      const pad = 60;
+      const targetSize = size - pad * 2;
+      const imgAspect = image.width / image.height;
+      let w = targetSize;
+      let h = targetSize;
+      if (imgAspect > 1) {
+        h = targetSize / imgAspect;
+      } else {
+        w = targetSize * imgAspect;
+      }
+      ctx.save();
+      ctx.globalAlpha = 0.65; // High contrast neon blending
+      ctx.drawImage(image, size/2 - w/2, size/2 - h/2, w, h);
+      ctx.restore();
+    }
+
+    // Stylized background pattern (concentric circles / grid)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    for (let r = 50; r < size; r += 40) {
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Crosshairs / Tech grid elements
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.moveTo(0, size/2); ctx.lineTo(size, size/2);
+    ctx.moveTo(size/2, 0); ctx.lineTo(size/2, size);
+    ctx.stroke();
+
+    // Neon boundary frame
+    ctx.strokeStyle = meme.color;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(10, 10, size - 20, size - 20);
+
+    // Sub-boundary frame
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(16, 16, size - 32, size - 32);
+
+    // TEXT LAYER
+    // Drop shadow for text readability
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Header
+    ctx.font = 'bold 20px "Outfit", sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText('MEME LAYER', size/2, 50);
+
+    // Era
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '16px "Outfit", sans-serif';
+    ctx.fillText(`ACTIVE ERA: ${meme.bornYear} - ${meme.diedYear}`, size/2, 85);
+
+    // Main Text (Meme representation / punchline)
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px "Outfit", sans-serif';
+    
+    // Wrap text if long
+    const words = meme.text.split(' ');
+    let line = '';
+    let y = size/2 - 10;
+    for (let n = 0; n < words.length; n++) {
+      let testLine = line + words[n] + ' ';
+      let metrics = ctx.measureText(testLine);
+      if (metrics.width > size - 80 && n > 0) {
+        ctx.fillText(line, size/2, y);
+        line = words[n] + ' ';
+        y += 32;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, size/2, y);
+
+    // Footer: Title
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = meme.color;
+    ctx.font = 'bold 22px "Outfit", sans-serif';
+    ctx.fillText(meme.name.toUpperCase(), size/2, size - 65);
+
+    texture.needsUpdate = true;
+  }
+
+  // Draw initial state (with colored procedural grid only)
+  render();
+
+  // Load actual image asynchronously with CORS enabled
+  if (meme.imageUrl) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      render(img);
+    };
+    img.onerror = () => {
+      console.warn(`Failed to load image for: ${meme.name}`);
+    };
+    img.src = meme.imageUrl;
+  }
+
   return texture;
 }
 
