@@ -4,764 +4,597 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { memeData } from './memeData.js';
 
-// --- Global App State ---
+// ─────────────────────────────────────────────
+//  SPATIAL MODEL (revised for X-axis travel)
+//
+//  Concept: User stands at (x, y=8, z=12) and looks down at the strata below.
+//  Each meme is a tall slab standing on the X-axis.
+//    X-axis   = time (left = 2000, right = 2026)
+//    Z-axis   = depth of the slab (duration of the meme)
+//    Camera X = current year being explored
+//
+//  K_X = 12 units per year on X-axis
+// ─────────────────────────────────────────────
+
+const K_X = 12;         // 1 year = 12 units on X
+const CURRENT_YEAR = 2026;
+const START_YEAR   = 2000;
+const TOTAL_YEARS  = CURRENT_YEAR - START_YEAR; // 26
+
+// ── Global App State ─────────────────────────
 const state = {
-  currentX: 0,
-  targetX: 0,
-  currentZ: 0,
-  targetZ: 0,
-  timeRange: { min: -520, max: 0 }, // 2000 to 2026. K_z = 20 units per year.
+  currentX: 0,   // camera X position (lerped)
+  targetX:  0,   // goal X
   isSerialConnected: false,
   activeMeme: null,
 };
 
-const K_Z = 20; // 1 year = 20 units
-
-// --- DOM Elements ---
-const overlay = document.getElementById('overlay');
-const connectBtn = document.getElementById('connect-btn');
-const hud = document.getElementById('hud');
+// ── DOM Elements ─────────────────────────────
+const overlay       = document.getElementById('overlay');
+const connectBtn    = document.getElementById('connect-btn');
+const hud           = document.getElementById('hud');
 const currentYearEl = document.getElementById('current-year');
-const activeMemeEl = document.getElementById('active-meme');
+const activeMemeEl  = document.getElementById('active-meme');
 const activeDurationEl = document.getElementById('active-duration');
-const serialDot = document.getElementById('serial-dot');
-const serialStatus = document.getElementById('serial-status');
-const canvas = document.getElementById('webgl');
+const serialDot     = document.getElementById('serial-dot');
+const serialStatus  = document.getElementById('serial-status');
+const webglCanvas   = document.getElementById('webgl');
+const timelineWrapper = document.getElementById('timeline-wrapper');
+const timelineRuler   = document.getElementById('timeline-ruler');
 
-// --- Procedural Canvas Texture Generator ---
+// ── Three.js references ───────────────────────
+let scene, camera, renderer, composer, bokehPass;
+const slabs = [];
+
+// Audio
+let audioCtx = null, droneOsc = null, subOsc = null, filterNode = null, gainNode = null;
+
+// Particles
+let particles;
+const PARTICLE_COUNT = 800;
+
+// ─────────────────────────────────────────────
+//  TEXTURE GENERATOR
+//  Draws the meme image on a canvas texture.
+//  On first call draws a colored placeholder.
+//  When the image loads, redraws with the real image.
+// ─────────────────────────────────────────────
 function createMemeTexture(meme) {
-  const size = 512;
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = size;
-  canvas.height = size;
+  const SIZE = 512;
+  const cvs  = document.createElement('canvas');
+  const ctx  = cvs.getContext('2d');
+  cvs.width  = SIZE;
+  cvs.height = SIZE;
 
-  const texture = new THREE.CanvasTexture(canvas);
+  const texture = new THREE.CanvasTexture(cvs);
   texture.colorSpace = THREE.SRGBColorSpace;
 
-  function render(image = null) {
-    ctx.clearRect(0, 0, size, size);
+  function draw(image = null) {
+    ctx.clearRect(0, 0, SIZE, SIZE);
 
-    // Background gradient
-    const grad = ctx.createRadialGradient(size/2, size/2, 50, size/2, size/2, size);
-    grad.addColorStop(0, meme.color);
-    grad.addColorStop(1, '#050505');
+    // Dark background
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Colour wash (era color)
+    const grad = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, SIZE * 0.75);
+    grad.addColorStop(0, meme.color + '33');
+    grad.addColorStop(1, 'transparent');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillRect(0, 0, SIZE, SIZE);
 
-    // Draw actual meme image if loaded
+    // Real meme photo (centered, aspect-fit, full bleed with slight transparency)
     if (image) {
-      const pad = 60;
-      const targetSize = size - pad * 2;
-      const imgAspect = image.width / image.height;
-      let w = targetSize;
-      let h = targetSize;
-      if (imgAspect > 1) {
-        h = targetSize / imgAspect;
-      } else {
-        w = targetSize * imgAspect;
-      }
+      const aspect = image.width / image.height;
+      let w = SIZE, h = SIZE;
+      if (aspect > 1) { h = SIZE / aspect; }
+      else            { w = SIZE * aspect; }
       ctx.save();
-      ctx.globalAlpha = 0.65; // High contrast neon blending
-      ctx.drawImage(image, size/2 - w/2, size/2 - h/2, w, h);
+      ctx.globalAlpha = 0.90;
+      ctx.drawImage(image, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
       ctx.restore();
     }
 
-    // Stylized background pattern (concentric circles / grid)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-    ctx.lineWidth = 1;
-    for (let r = 50; r < size; r += 40) {
-      ctx.beginPath();
-      ctx.arc(size/2, size/2, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // Crosshairs / Tech grid elements
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.beginPath();
-    ctx.moveTo(0, size/2); ctx.lineTo(size, size/2);
-    ctx.moveTo(size/2, 0); ctx.lineTo(size/2, size);
-    ctx.stroke();
-
-    // Neon boundary frame
+    // Very thin neon border (meme's era colour)
     ctx.strokeStyle = meme.color;
-    ctx.lineWidth = 6;
-    ctx.strokeRect(10, 10, size - 20, size - 20);
+    ctx.lineWidth   = 3;
+    ctx.strokeRect(4, 4, SIZE - 8, SIZE - 8);
 
-    // Sub-boundary frame
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(16, 16, size - 32, size - 32);
+    // Bottom gradient bar for text legibility
+    const barGrad = ctx.createLinearGradient(0, SIZE - 100, 0, SIZE);
+    barGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    barGrad.addColorStop(1, 'rgba(0,0,0,0.88)');
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(0, SIZE - 100, SIZE, 100);
 
-    // TEXT LAYER
-    // Drop shadow for text readability
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
+    // Meme name
+    ctx.fillStyle   = '#ffffff';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.font        = 'bold 22px "Outfit", sans-serif';
+    ctx.shadowColor  = 'rgba(0,0,0,1)';
+    ctx.shadowBlur   = 8;
+    ctx.fillText(meme.name.toUpperCase(), SIZE / 2, SIZE - 14);
 
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Header
-    ctx.font = 'bold 20px "Outfit", sans-serif';
-    ctx.letterSpacing = '2px';
-    ctx.fillText('MEME LAYER', size/2, 50);
-
-    // Era
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '16px "Outfit", sans-serif';
-    ctx.fillText(`ACTIVE ERA: ${meme.bornYear} - ${meme.diedYear}`, size/2, 85);
-    
-    // Duration
-    const duration = meme.diedYear - meme.bornYear || 1;
+    // Year range
+    ctx.font      = '15px "Outfit", sans-serif';
     ctx.fillStyle = meme.color;
-    ctx.font = 'bold 14px "Outfit", sans-serif';
-    ctx.fillText(`DURATION: ${duration} YEAR${duration > 1 ? 'S' : ''}`, size/2, 115);
+    ctx.shadowBlur = 4;
+    ctx.fillText(`${meme.bornYear} – ${meme.diedYear}`, SIZE / 2, SIZE - 44);
 
-    // Main Text (Meme representation / punchline)
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px "Outfit", sans-serif';
-    
-    // Wrap text if long
-    const words = meme.text.split(' ');
-    let line = '';
-    let y = size/2 - 10;
-    for (let n = 0; n < words.length; n++) {
-      let testLine = line + words[n] + ' ';
-      let metrics = ctx.measureText(testLine);
-      if (metrics.width > size - 80 && n > 0) {
-        ctx.fillText(line, size/2, y);
-        line = words[n] + ' ';
-        y += 32;
-      } else {
-        line = testLine;
-      }
-    }
-    ctx.fillText(line, size/2, y);
-
-    // Footer: Title
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.fillStyle = meme.color;
-    ctx.font = 'bold 22px "Outfit", sans-serif';
-    ctx.fillText(meme.name.toUpperCase(), size/2, size - 65);
-
+    ctx.shadowBlur   = 0;
     texture.needsUpdate = true;
   }
 
-  // Draw initial state (with colored procedural grid only)
-  render();
+  draw(); // placeholder immediately
 
-  // Load actual image asynchronously with CORS enabled
   if (meme.imageUrl) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      render(img);
-    };
-    img.onerror = () => {
-      console.warn(`Failed to load image for: ${meme.name}`);
-    };
+    img.onload  = () => draw(img);
+    img.onerror = () => console.warn('Image failed:', meme.name);
     img.src = meme.imageUrl;
   }
 
   return texture;
 }
 
-// --- Custom Slit-scan & Degradation Material Builder ---
-function createPillarMaterials(meme, texture) {
-  // Compute depth progress based on birth year relative to timeline
-  // Current (2026) is 0.0, Oldest (2000) is 1.0
-  const depthProgress = Math.max(0, Math.min(1, (2026 - meme.bornYear) / 26));
+// ─────────────────────────────────────────────
+//  SLAB MATERIAL BUILDER
+//  Front  (+Z face): full meme texture
+//  Sides  (X faces): slit-scan edge extrusion
+//  Top    (+Y face): thin glowing top stripe
+//  Back/Bottom:      dark absorbing material
+// ─────────────────────────────────────────────
+function createSlabMaterials(meme, texture) {
+  const depthProgress = Math.max(0, Math.min(1, (CURRENT_YEAR - meme.bornYear) / 26));
 
-  // Shared parameters
-  const baseRoughness = 0.1 + depthProgress * 0.7; // Deep Z (older) is rougher
-  const baseMetalness = 0.1;
-
-  // Custom vertex shader helper for passing world position to compute degradation
-  const vertexShader = `
+  const vertexShader = /* glsl */`
     varying vec2 vUv;
-    varying vec3 vWorldPosition;
+    varying vec3 vWorldPos;
     varying vec3 vNormal;
     void main() {
-      vUv = uv;
-      vNormal = normalize(normalMatrix * normal);
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      vUv        = uv;
+      vNormal    = normalize(normalMatrix * normal);
+      vec4 wp    = modelMatrix * vec4(position, 1.0);
+      vWorldPos  = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
     }
   `;
 
-  // Custom fragment shader for side stretching (slit-scan) and aging noise
-  const fragmentShaderSide = (edgeUvExpr) => `
-    uniform sampler2D uTexture;
-    uniform float uDepthProgress;
-    uniform float uRoughness;
+  const agingGlsl = /* glsl */`
+    float hash(vec2 p){
+      p = fract(p * vec2(123.34,456.21));
+      p += dot(p, p+45.32);
+      return fract(p.x*p.y);
+    }
+    vec3 applyAge(vec3 col, float depth, vec2 uv, vec3 worldPos){
+      float grain   = hash(uv * 900.0 + worldPos.xz * 3.0) * 0.10 * depth;
+      float scratch = step(0.994, hash(vec2(uv.x * 280.0, 0.0)))
+                    * hash(vec2(0.0, worldPos.z * 12.0)) * 0.3 * depth;
+      col = mix(col, vec3(dot(col, vec3(0.299,0.587,0.114))), depth * 0.45);
+      col = mix(col, vec3(0.48,0.42,0.32) * dot(col, vec3(0.33)), depth * 0.25);
+      return col - grain + scratch;
+    }
+  `;
+
+  const frontFrag = /* glsl */`
+    uniform sampler2D uTex;
+    uniform float uAge;
+    uniform vec3  uColor;
+    varying vec2  vUv;
+    varying vec3  vWorldPos;
+    varying vec3  vNormal;
+    ${agingGlsl}
+    void main(){
+      vec4 t = texture2D(uTex, vUv);
+      vec3 c = applyAge(t.rgb, uAge, vUv, vWorldPos);
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `;
+
+  const sideFrag = (edgeUv) => /* glsl */`
+    uniform sampler2D uTex;
+    uniform float uAge;
+    uniform vec3  uColor;
+    varying vec2  vUv;
+    varying vec3  vWorldPos;
+    varying vec3  vNormal;
+    ${agingGlsl}
+    void main(){
+      vec2 uv2 = ${edgeUv};
+      vec4 t   = texture2D(uTex, uv2);
+      vec3 c   = applyAge(t.rgb, uAge, vUv, vWorldPos);
+
+      // Vertical year-ring lines (every K_X = 12 units on X)
+      float xFrac = fract(vWorldPos.x / 12.0);
+      float ring  = step(0.96, xFrac) + step(xFrac, 0.04);
+      c = mix(c, uColor * 1.8, ring * 0.55);
+
+      float diff = max(0.35, dot(vNormal, normalize(vec3(0.0, 3.0, 2.0))));
+      gl_FragColor = vec4(c * diff, 1.0);
+    }
+  `;
+
+  const topFrag = /* glsl */`
+    uniform vec3  uColor;
+    varying vec3  vWorldPos;
+    void main(){
+      float xFrac = fract(vWorldPos.x / 12.0);
+      float ring  = step(0.93, xFrac) + step(xFrac, 0.07);
+      vec3  base  = uColor * 0.25;
+      vec3  glow  = uColor * 1.5;
+      gl_FragColor = vec4(mix(base, glow, ring), 1.0);
+    }
+  `;
+
+  const darkFrag = /* glsl */`
     uniform vec3 uColor;
-    varying vec2 vUv;
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-
-    float hash(vec2 p) {
-      p = fract(p * vec2(123.34, 456.21));
-      p += dot(p, p + 45.32);
-      return fract(p.x * p.y);
-    }
-
-    void main() {
-      // Slit-scan: clamp UV to the edge of the texture
-      vec2 stretchedUv = ${edgeUvExpr};
-      vec4 texColor = texture2D(uTexture, stretchedUv);
-
-      // Procedural age degradation
-      // 1. High frequency noise (scratches / dust)
-      float grain = hash(vWorldPosition.xy * 120.0 + vWorldPosition.z * 5.0) * 0.12 * uDepthProgress;
-      
-      // 2. Vertical long scratches
-      float scratchPattern = step(0.994, hash(vec2(vUv.x * 250.0, 0.0))) * hash(vec2(0.0, vWorldPosition.z * 15.0)) * 0.35 * uDepthProgress;
-
-      // Color degradation: tint older layers with yellow/gray cast
-      vec3 agedColor = texColor.rgb;
-      agedColor = mix(agedColor, vec3(dot(agedColor, vec3(0.299, 0.587, 0.114))), uDepthProgress * 0.4); // Desaturate
-      agedColor = mix(agedColor, vec3(0.5, 0.45, 0.35) * dot(agedColor, vec3(0.33)), uDepthProgress * 0.3); // Yellow tint
-      
-      // Draw geological stratum layer lines every 20 units (representing 1 year since K_Z = 20)
-      // We check if the world Z coordinate is close to an integer multiple of 20
-      float zFract = fract(vWorldPosition.z / 20.0);
-      float lineIntensity = step(0.97, zFract) + step(zFract, 0.03);
-      vec3 lineGlow = uColor * 1.5;
-
-      // Combine lighting effects
-      vec3 finalColor = agedColor - vec3(grain) + vec3(scratchPattern);
-      finalColor = mix(finalColor, lineGlow, lineIntensity * 0.6);
-      
-      // Simple lighting simulation for standard look
-      float diffuse = max(0.4, dot(vNormal, normalize(vec3(1.0, 2.0, 3.0))));
-      gl_FragColor = vec4(finalColor * diffuse, 1.0);
+    void main(){
+      gl_FragColor = vec4(uColor * 0.05, 1.0);
     }
   `;
 
-  const fragmentShaderFront = `
-    uniform sampler2D uTexture;
-    uniform float uDepthProgress;
-    uniform float uRoughness;
-    varying vec2 vUv;
-    varying vec3 vWorldPosition;
-    varying vec3 vNormal;
-
-    float hash(vec2 p) {
-      p = fract(p * vec2(123.34, 456.21));
-      p += dot(p, p + 45.32);
-      return fract(p.x * p.y);
-    }
-
-    void main() {
-      vec4 texColor = texture2D(uTexture, vUv);
-
-      // Procedural age degradation (dust/grain)
-      float grain = hash(vUv * 800.0) * 0.08 * uDepthProgress;
-      float scratchPattern = step(0.995, hash(vec2(vUv.x * 300.0, 0.0))) * hash(vec2(0.0, vUv.y * 300.0)) * 0.25 * uDepthProgress;
-
-      vec3 agedColor = texColor.rgb;
-      agedColor = mix(agedColor, vec3(dot(agedColor, vec3(0.299, 0.587, 0.114))), uDepthProgress * 0.4);
-      
-      vec3 finalColor = agedColor - vec3(grain) + vec3(scratchPattern);
-      
-      float diffuse = max(0.95, dot(vNormal, normalize(vec3(1.0, 2.0, 3.0))));
-      gl_FragColor = vec4(finalColor * diffuse, 1.0);
-    }
-  `;
-
-  // Create uniforms
   const uniforms = {
-    uTexture: { value: texture },
-    uDepthProgress: { value: depthProgress },
-    uRoughness: { value: baseRoughness },
-    uColor: { value: new THREE.Color(meme.color) }
+    uTex:   { value: texture },
+    uAge:   { value: depthProgress },
+    uColor: { value: new THREE.Color(meme.color) },
   };
 
-  // Materials for the 6 faces:
-  // 0: right (+X), 1: left (-X), 2: top (+Y), 3: bottom (-Y), 4: front (+Z), 5: back (-Z)
+  // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
   return [
-    // Right (+X) - Clamps to right edge (1.0, y)
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderSide(`vec2(1.0, vUv.y)`),
-      uniforms
-    }),
-    // Left (-X) - Clamps to left edge (0.0, y)
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderSide(`vec2(0.0, vUv.y)`),
-      uniforms
-    }),
-    // Top (+Y) - Clamps to top edge (x, 1.0)
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderSide(`vec2(vUv.x, 1.0)`),
-      uniforms
-    }),
-    // Bottom (-Y) - Clamps to bottom edge (x, 0.0)
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderSide(`vec2(vUv.x, 0.0)`),
-      uniforms
-    }),
-    // Front (+Z) - standard UV
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderFront,
-      uniforms
-    }),
-    // Back (-Z) - standard UV
-    new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: fragmentShaderFront,
-      uniforms
-    })
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: sideFrag(`vec2(1.0, vUv.y)`), uniforms }), // right
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: sideFrag(`vec2(0.0, vUv.y)`), uniforms }), // left
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: topFrag,                      uniforms }), // top
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: darkFrag,                     uniforms }), // bottom
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: frontFrag,                    uniforms }), // front (+Z)
+    new THREE.ShaderMaterial({ vertexShader, fragmentShader: darkFrag,                     uniforms }), // back  (-Z)
   ];
 }
 
-// --- Setup Three.js Scene ---
-let scene, camera, renderer, composer, bokehPass;
-const pillars = [];
-
-// Sliding Timeline Ruler Elements
-const timelineWrapper = document.getElementById('timeline-wrapper');
-const timelineRuler = document.getElementById('timeline-ruler');
-
-// Ambient Particles
-let particles;
-const particleCount = 1000;
-
-// Web Audio API Synthesizer (Museum Art Installation Sound)
-let audioCtx = null;
-let droneOsc = null;
-let subOsc = null;
-let filterNode = null;
-let gainNode = null;
-
+// ─────────────────────────────────────────────
+//  SCENE INIT
+// ─────────────────────────────────────────────
 function initThree() {
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2('#050505', 0.012);
+  scene.background = new THREE.Color('#030408');
+  scene.fog = new THREE.Fog('#030408', 30, 180);
 
-  // Camera
-  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 0, 15);
+  // ── Camera: elevated, angled down, looking along X axis ──
+  // Position: slightly elevated and forward on Z, looking toward the slabs
+  camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
+  camera.position.set(yearToX(CURRENT_YEAR), 14, 20);
+  camera.lookAt(yearToX(CURRENT_YEAR), 0, -10);
 
-  // Renderer
-  renderer = new THREE.WebGLRenderer({
-    canvas: canvas,
-    antialias: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // ── Renderer ──
+  renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
 
-  // Add Lights (ambient and spotlights for plastic transparency reflections)
-  const ambientLight = new THREE.AmbientLight('#ffffff', 0.35);
-  scene.add(ambientLight);
+  // ── Lighting ──
+  // Very dim ambient (museum darkness)
+  scene.add(new THREE.AmbientLight('#1a1a2e', 1.0));
 
-  const dirLight1 = new THREE.DirectionalLight('#ffffff', 0.85);
-  dirLight1.position.set(5, 15, 10);
-  scene.add(dirLight1);
+  // Primary spotlight from above-left (dramatic raking light)
+  const spot1 = new THREE.SpotLight('#ffffff', 4.5, 200, Math.PI / 6, 0.4, 1.5);
+  spot1.position.set(-20, 35, 25);
+  spot1.castShadow = true;
+  spot1.shadow.bias = -0.001;
+  scene.add(spot1);
+  scene.add(spot1.target);
 
-  const dirLight2 = new THREE.DirectionalLight('#ffffff', 0.25);
-  dirLight2.position.set(-5, -5, -15);
-  scene.add(dirLight2);
+  // Subtle blue fill from right (cool ambient)
+  const fill = new THREE.DirectionalLight('#2233aa', 0.4);
+  fill.position.set(40, 10, 5);
+  scene.add(fill);
 
-  // Track allocation algorithm to prevent visual overlaps (interval scheduling)
-  const sortedMemes = [...memeData].sort((a, b) => a.bornYear - b.bornYear);
-  const tracks = [];
-  const memeTrackMap = new Map();
-
-  sortedMemes.forEach(meme => {
-    const lengthZ = Math.max(0.8, (meme.diedYear - meme.bornYear) * K_Z);
-    const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
-    const startZ = posZ - (lengthZ / 2);
-
-    let assignedTrack = -1;
-    for (let i = 0; i < tracks.length; i++) {
-      // Allow safety buffer of 5 units between pillars in the same track
-      if (tracks[i] + 5.0 <= startZ) {
-        assignedTrack = i;
-        tracks[i] = posZ + (lengthZ / 2);
-        break;
-      }
-    }
-
-    if (assignedTrack === -1) {
-      tracks.push(posZ + (lengthZ / 2));
-      assignedTrack = tracks.length - 1;
-    }
-    memeTrackMap.set(meme.id, assignedTrack);
+  // ── Floor plane (reflective dark surface like polished concrete) ──
+  const floorGeo = new THREE.PlaneGeometry(400, 200);
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: '#080c14',
+    roughness: 0.15,
+    metalness: 0.6,
   });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -2.0;
+  floor.receiveShadow = true;
+  scene.add(floor);
 
-  const numTracks = tracks.length;
+  // ── Build Slabs ──
+  memeData.forEach((meme) => {
+    const duration  = Math.max(0.5, meme.diedYear - meme.bornYear);
+    const width     = K_X * (meme.bornYear === meme.diedYear ? 0.4 : duration * 0.3); // Width on X = duration (thick = long-lived)
+    const height    = 5.5;
+    const depthZ    = 6.0; // All slabs same depth on Z; they're like playing cards lined up
 
-  // Generate Pillars
-  memeData.forEach((meme, index) => {
-    // 1. Z-axis mapping
-    const lengthZ = Math.max(0.8, (meme.diedYear - meme.bornYear) * K_Z);
-    const posZ = (meme.bornYear - 2026) * K_Z + (lengthZ / 2);
+    const centerX   = yearToX(meme.bornYear) + (K_X * duration) / 2;
 
-    // 2. Geometry
-    // We place tracks on the left and right sides of a central corridor (width of 6.4 units)
-    // to prevent camera collisions and keep navigation clean.
-    const trackIndex = memeTrackMap.get(meme.id);
-    let staggerX = 0;
-    if (trackIndex % 2 === 0) {
-      staggerX = -3.2 - (trackIndex / 2) * 2.2;
-    } else {
-      staggerX = 3.2 + ((trackIndex - 1) / 2) * 2.2;
-    }
-    const staggerY = 0; // eye level
-    const geometry = new THREE.BoxGeometry(3, 3, lengthZ);
+    // Stagger slabs gently on Z (-3 to +3) so they don't all sit in one plane
+    const phaseZ    = Math.sin(meme.bornYear * 7.3 + meme.name.charCodeAt(0) * 0.5) * 4;
 
-    // 3. Materials
-    const texture = createMemeTexture(meme);
-    const materials = createPillarMaterials(meme, texture);
+    const geo = new THREE.BoxGeometry(width, height, depthZ);
 
-    // 4. Mesh
-    const mesh = new THREE.Mesh(geometry, materials);
-    mesh.position.set(staggerX, staggerY, posZ);
+    const texture  = createMemeTexture(meme);
+    const mats     = createSlabMaterials(meme, texture);
+
+    const mesh = new THREE.Mesh(geo, mats);
+    mesh.position.set(centerX, height / 2 - 2, -10 + phaseZ);
+    mesh.castShadow    = true;
+    mesh.receiveShadow = true;
     scene.add(mesh);
 
-    pillars.push({
+    slabs.push({
       mesh,
       data: meme,
-      startZ: posZ - (lengthZ / 2),
-      endZ: posZ + (lengthZ / 2),
+      startX: centerX - width / 2,
+      endX:   centerX + width / 2,
     });
   });
 
-  // Ambient Drifting Particles
-  const particleGeometry = new THREE.BufferGeometry();
-  const particlePositions = new Float32Array(particleCount * 3);
-  for (let i = 0; i < particleCount; i++) {
-    particlePositions[i * 3] = (Math.random() - 0.5) * 35;
-    particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-    particlePositions[i * 3 + 2] = Math.random() * -600 + 50;
+  // ── Particles ──
+  const pGeo = new THREE.BufferGeometry();
+  const pPos = new Float32Array(PARTICLE_COUNT * 3);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    pPos[i * 3 + 0] = (Math.random() - 0.5) * 340;
+    pPos[i * 3 + 1] =  Math.random() * 20;
+    pPos[i * 3 + 2] = (Math.random() - 0.5) * 60;
   }
-  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-  const particleMaterial = new THREE.PointsMaterial({
-    color: '#ffffff',
-    size: 0.12,
-    transparent: true,
-    opacity: 0.35,
-    sizeAttenuation: true
-  });
-  particles = new THREE.Points(particleGeometry, particleMaterial);
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  particles = new THREE.Points(pGeo, new THREE.PointsMaterial({
+    color: '#88aaff', size: 0.08, transparent: true, opacity: 0.4, sizeAttenuation: true,
+  }));
   scene.add(particles);
 
-  // Setup HTML timeline elements
-  setupTimelineRuler();
-
-  // Post-processing setup
+  // ── Post-processing ──
   composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
-  composer.addPass(renderPass);
+  composer.addPass(new RenderPass(scene, camera));
 
-  // BokehPass for Depth of Field (very soft, subtle blur to keep text readable)
   bokehPass = new BokehPass(scene, camera, {
-    focus: 15.0,
-    aperture: 0.0012, // Reduced to make the focus zone very wide and legible
-    maxblur: 0.005,  // Softer blur peak
-    width: window.innerWidth,
-    height: window.innerHeight
+    focus:    26.0,   // roughly the distance from camera to slab fronts
+    aperture: 0.0006, // very narrow, large depth of field → everything readable
+    maxblur:  0.003,
+    width:    innerWidth,
+    height:   innerHeight,
   });
   composer.addPass(bokehPass);
 
-  // Handle Resize
-  window.addEventListener('resize', onWindowResize);
+  // ── Timeline ──
+  buildTimeline();
+
+  // ── Resize ──
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
+  });
 }
 
-function setupTimelineRuler() {
-  const spacing = 60; // Pixels per year
-  for (let year = 2000; year <= 2026; year++) {
-    const ageIndex = year - 2000;
-    const xPos = ageIndex * spacing;
+// Helper: year → scene X coordinate
+function yearToX(year) {
+  return (year - CURRENT_YEAR) * K_X;
+}
 
-    // Tick line
+// ─────────────────────────────────────────────
+//  TIMELINE RULER (horizontal, bottom of screen)
+// ─────────────────────────────────────────────
+function buildTimeline() {
+  const PX_PER_YEAR = 64;
+  for (let y = START_YEAR; y <= CURRENT_YEAR; y++) {
+    const offset = (y - START_YEAR) * PX_PER_YEAR;
+    const major  = (y % 5 === 0) || y === CURRENT_YEAR;
+
     const tick = document.createElement('div');
-    tick.className = 'timeline-tick';
-    if (year % 5 === 0 || year === 2026) {
-      tick.classList.add('major');
-
-      // Year Label text
-      const text = document.createElement('div');
-      text.className = 'timeline-year-text';
-      text.id = `tick-year-${year}`;
-      text.textContent = year;
-      text.style.left = `${xPos}px`;
-      timelineRuler.appendChild(text);
-    }
-    tick.style.left = `${xPos}px`;
+    tick.className = 'timeline-tick' + (major ? ' major' : '');
+    tick.style.left = offset + 'px';
     timelineRuler.appendChild(tick);
+
+    if (major) {
+      const label = document.createElement('div');
+      label.className    = 'timeline-year-text';
+      label.id           = `tick-year-${y}`;
+      label.textContent  = y;
+      label.style.left   = offset + 'px';
+      timelineRuler.appendChild(label);
+    }
   }
 }
 
+// ─────────────────────────────────────────────
+//  CONTROLS  (scroll / drag / keyboard / serial)
+// ─────────────────────────────────────────────
+const PX_PER_YEAR = 64; // Must match buildTimeline
+
+let isDragging = false, lastMouseX = 0;
+
+window.addEventListener('wheel', e => {
+  state.targetX += e.deltaY * 0.05;   // scroll up = travel to past (negative X)
+  clamp();
+});
+
+window.addEventListener('mousedown', e => { isDragging = true; lastMouseX = e.clientX; });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  state.targetX -= (e.clientX - lastMouseX) * 0.06;
+  lastMouseX = e.clientX;
+  clamp();
+});
+window.addEventListener('mouseup', () => { isDragging = false; });
+
+window.addEventListener('keydown', e => {
+  const step = K_X;
+  if (e.key === 'ArrowLeft')  state.targetX -= step;
+  if (e.key === 'ArrowRight') state.targetX += step;
+  clamp();
+});
+
+// Touch support
+let lastTouchX = 0;
+window.addEventListener('touchstart', e => { lastTouchX = e.touches[0].clientX; });
+window.addEventListener('touchmove',  e => {
+  state.targetX -= (e.touches[0].clientX - lastTouchX) * 0.06;
+  lastTouchX = e.touches[0].clientX;
+  clamp();
+}, { passive: true });
+
+function clamp() {
+  const minX = yearToX(START_YEAR);
+  const maxX = yearToX(CURRENT_YEAR);
+  state.targetX = Math.max(minX - K_X, Math.min(maxX + K_X, state.targetX));
+}
+
+// ─────────────────────────────────────────────
+//  WEB SERIAL
+// ─────────────────────────────────────────────
+async function initSerial() {
+  if (!('serial' in navigator)) {
+    serialStatus.textContent = 'UNSUPPORTED'; return;
+  }
+  try {
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    state.isSerialConnected = true;
+    serialDot.classList.add('active');
+    serialStatus.textContent = 'CONNECTED';
+
+    const dec    = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    const reader = dec.readable.getReader();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        const v = parseFloat(line.trim());
+        if (!isNaN(v)) { state.targetX += v * (K_X / 4); clamp(); }
+      }
+    }
+  } catch (e) {
+    console.warn('Serial failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  WEB AUDIO  (ambient museum drone)
+// ─────────────────────────────────────────────
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Low-frequency warm triangle drone (base frequency = 55Hz, A1 note)
-  droneOsc = audioCtx.createOscillator();
-  droneOsc.type = 'triangle';
-  droneOsc.frequency.setValueAtTime(55.0, audioCtx.currentTime);
+  droneOsc = audioCtx.createOscillator(); droneOsc.type = 'triangle'; droneOsc.frequency.value = 55;
+  subOsc   = audioCtx.createOscillator(); subOsc.type   = 'sine';     subOsc.frequency.value   = 27.5;
 
-  // Deep sub rumble sine wave (base frequency = 27.5Hz, A0 note)
-  subOsc = audioCtx.createOscillator();
-  subOsc.type = 'sine';
-  subOsc.frequency.setValueAtTime(27.5, audioCtx.currentTime);
-
-  // Biquad Lowpass filter for dark, warm, smoky texture
   filterNode = audioCtx.createBiquadFilter();
-  filterNode.type = 'lowpass';
-  filterNode.frequency.setValueAtTime(100.0, audioCtx.currentTime);
-  filterNode.Q.setValueAtTime(4.0, audioCtx.currentTime);
+  filterNode.type = 'lowpass'; filterNode.frequency.value = 110; filterNode.Q.value = 3.5;
 
-  // Ambient Gain Node
-  gainNode = audioCtx.createGain();
-  gainNode.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+  gainNode = audioCtx.createGain(); gainNode.gain.value = 0.0001;
 
-  // Connections
-  droneOsc.connect(filterNode);
-  subOsc.connect(filterNode);
-  filterNode.connect(gainNode);
-  gainNode.connect(audioCtx.destination);
+  droneOsc.connect(filterNode); subOsc.connect(filterNode);
+  filterNode.connect(gainNode); gainNode.connect(audioCtx.destination);
 
-  // Start oscillators
-  droneOsc.start();
-  subOsc.start();
-
-  // Smooth fade-in
-  gainNode.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 4.0);
+  droneOsc.start(); subOsc.start();
+  gainNode.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 4);
 }
 
-function updateAudio() {
+function updateAudio(t) {
   if (!audioCtx) return;
-
-  // Deeper Z (older) shifts to a lower frequency drone
-  const depthFactor = Math.max(0, Math.min(1, -state.currentZ / 520.0));
-  const targetBaseFreq = 55.0 - depthFactor * 18.35; // Drops from 55Hz (A1) to 36.65Hz (D1)
-
-  // Scroll speed adds Doppler pitch shifts and friction wind sounds
-  const speed = Math.abs(state.targetZ - state.currentZ);
-  const pitchBend = speed * 0.45;
-
-  droneOsc.frequency.setTargetAtTime(targetBaseFreq + pitchBend, audioCtx.currentTime, 0.1);
-
-  // Open filter cutoff on movement
-  const targetFilterFreq = 100.0 + speed * 15.0 + depthFactor * 50.0;
-  filterNode.frequency.setTargetAtTime(targetFilterFreq, audioCtx.currentTime, 0.15);
+  // Pitch dips in the "past" (negative X) — older eras feel heavier
+  const depth = Math.max(0, Math.min(1, -state.currentX / (TOTAL_YEARS * K_X)));
+  const speed = Math.abs(state.targetX - state.currentX);
+  droneOsc.frequency.setTargetAtTime(55 - depth * 18 + speed * 0.4, audioCtx.currentTime, 0.1);
+  filterNode.frequency.setTargetAtTime(110 + speed * 12 + depth * 40, audioCtx.currentTime, 0.15);
 }
 
-// --- Interaction Handlers ---
-function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
+// ─────────────────────────────────────────────
+//  HUD HELPERS
+// ─────────────────────────────────────────────
+function xToYear(x) {
+  return Math.round(CURRENT_YEAR + x / K_X);
 }
 
-// --- Interaction Handlers ---
-
-// Mouse and Keyboard fallbacks
-let isDragging = false;
-let previousMouseY = 0;
-
-window.addEventListener('wheel', (e) => {
-  // Zoom on wheel
-  state.targetZ += e.deltaY * 0.05;
-  clampTargetZ();
-});
-
-window.addEventListener('mousedown', (e) => {
-  isDragging = true;
-  previousMouseY = e.clientY;
-});
-
-window.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  const deltaY = e.clientY - previousMouseY;
-  state.targetZ += deltaY * 0.15;
-  clampTargetZ();
-  previousMouseY = e.clientY;
-});
-
-window.addEventListener('mouseup', () => {
-  isDragging = false;
-});
-
-window.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
-    state.targetZ += 5;
-  } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
-    state.targetZ -= 5;
-  }
-  clampTargetZ();
-});
-
-function clampTargetZ() {
-  state.targetZ = Math.max(state.timeRange.min - 10, Math.min(state.timeRange.max + 15, state.targetZ));
-}
-
-// --- Web Serial API ---
-async function initSerial() {
-  if ('serial' in navigator) {
-    try {
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 115200 });
-
-      state.isSerialConnected = true;
-      serialDot.classList.add('active');
-      serialStatus.textContent = 'CONNECTED';
-
-      const textDecoder = new TextDecoderStream();
-      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
-
-      let buffer = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          reader.releaseLock();
-          break;
-        }
-        if (value) {
-          buffer += value;
-          const lines = buffer.split('\n');
-          // Keep last incomplete line in buffer
-          buffer = lines.pop();
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed) {
-              const val = parseInt(trimmed, 10);
-              if (!isNaN(val)) {
-                // Adjust target Z based on relative rotary encoder step
-                state.targetZ += val * 1.5;
-                clampTargetZ();
-              }
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Web Serial port initialization failed or cancelled:', err);
-    }
-  } else {
-    console.warn('Web Serial API is not supported in this browser.');
-    serialStatus.textContent = 'UNSUPPORTED';
-  }
-}
-
-// --- Startup Click Event ---
+// ─────────────────────────────────────────────
+//  STARTUP
+// ─────────────────────────────────────────────
 connectBtn.addEventListener('click', async () => {
   overlay.classList.add('hidden');
   hud.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
-
-  // Trigger web audio sound drone
   initAudio();
-
-  // Start serial listener
   await initSerial();
 });
 
-// --- Main Animation Loop ---
+// ─────────────────────────────────────────────
+//  ANIMATION LOOP
+// ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
 
-  // Smooth easing for camera position
+  // Lerp camera X
   state.currentX = THREE.MathUtils.lerp(state.currentX, state.targetX, 0.06);
-  state.currentZ = THREE.MathUtils.lerp(state.currentZ, state.targetZ, 0.08);
-  
+
+  // Camera tracks along X, maintaining elevated angle
   camera.position.x = state.currentX;
-  camera.position.z = state.currentZ + 15; // Maintain a slight offset in front of camera focus
+  camera.lookAt(state.currentX, 0, -10);
 
-  // Update HUD year indicator
-  // Z = 0 corresponds to 2026, Z = -520 is 2000
-  const computedYear = Math.round(2026 + (state.currentZ / K_Z));
-  const activeYear = Math.max(2000, Math.min(2026, computedYear));
-  currentYearEl.textContent = activeYear;
+  // Bokeh focus: camera is at z=20, slabs are at z≈-10 → distance ≈30
+  // Adjust focus to distance to active slab (keep current for now)
+  bokehPass.uniforms['focus'].value = 26.0;
 
-  // Sliding Timeline Ruler positioning
-  // Offset moves timeline-ruler left/right relative to middle pointer
-  const spacing = 60; // Pixels per year
-  const currentYearOffset = (2026 - 2000) + (state.currentZ / K_Z);
-  const rulerX = -currentYearOffset * spacing;
-  timelineRuler.style.transform = `translateX(${rulerX}px)`;
+  // HUD: current year
+  const year = Math.max(START_YEAR, Math.min(CURRENT_YEAR, xToYear(state.currentX)));
+  currentYearEl.textContent = year;
 
-  // Toggle highlight classes on the year ticks
+  // ── Timeline ruler scroll ──
+  const PX = 64;
+  const offset = -((year - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
+  timelineRuler.style.transform = `translateX(${offset}px)`;
   document.querySelectorAll('.timeline-year-text').forEach(el => {
-    if (el.id === `tick-year-${activeYear}`) {
-      el.classList.add('active');
-    } else {
-      el.classList.remove('active');
-    }
+    el.classList.toggle('active', el.id === `tick-year-${year}`);
   });
 
-  // Ambient particle drift animation
-  if (particles) {
-    const posAttr = particles.geometry.attributes.position;
-    const array = posAttr.array;
-    for (let i = 0; i < particleCount; i++) {
-      array[i * 3 + 1] -= 0.012; // slow downward drift
-      array[i * 3] += Math.sin(Date.now() * 0.0008 + i) * 0.003; // side sway
-
-      // Wrap particles back up to create loop
-      if (array[i * 3 + 1] < -10) {
-        array[i * 3 + 1] = 10;
-      }
-    }
-    posAttr.needsUpdate = true;
-  }
-
-  // Modulate audio parameters
-  updateAudio();
-
-  // Track active layer
-  let activeMeme = null;
-  let activePillar = null;
-  // Look for the meme whose depth coordinates contain the camera position
-  for (const pillar of pillars) {
-    if (state.currentZ >= pillar.startZ && state.currentZ <= pillar.endZ) {
-      activeMeme = pillar.data;
-      activePillar = pillar;
-      break;
+  // ── Active slab detection ──
+  let activeSlab = null;
+  for (const s of slabs) {
+    if (state.currentX >= s.startX && state.currentX <= s.endX) {
+      activeSlab = s; break;
     }
   }
 
-  // Update Active Meme HUD and target camera track X position
-  if (activeMeme) {
-    // Lean slightly towards the active track (35% scale) to keep the camera safely in the corridor
-    state.targetX = activePillar.mesh.position.x * 0.35;
-    if (state.activeMeme !== activeMeme) {
-      state.activeMeme = activeMeme;
-      activeMemeEl.textContent = activeMeme.name;
-      const duration = activeMeme.diedYear - activeMeme.bornYear || 1;
-      activeDurationEl.textContent = `${duration} YEAR${duration > 1 ? 'S' : ''}`;
+  if (activeSlab) {
+    const dur = activeSlab.data.diedYear - activeSlab.data.bornYear || 1;
+    if (state.activeMeme !== activeSlab.data) {
+      state.activeMeme = activeSlab.data;
+      activeMemeEl.textContent     = activeSlab.data.name;
+      activeDurationEl.textContent = `${dur} YEAR${dur > 1 ? 'S' : ''}`;
     }
   } else {
-    state.targetX = 0; // Return to center lane when in empty spaces
-    activeMemeEl.textContent = 'TRANSITION SPACE';
-    activeDurationEl.textContent = '—';
+    activeMemeEl.textContent     = '— —';
+    activeDurationEl.textContent = '';
+    state.activeMeme = null;
   }
 
-  // Bokeh Focus follows the camera target (always sharp at current year depth)
-  // The focus parameter is relative distance from camera. Since camera is at Z+15 relative to current time:
-  bokehPass.uniforms['focus'].value = 15.0;
+  // ── Particles drift ──
+  if (particles) {
+    const arr = particles.geometry.attributes.position.array;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      arr[i * 3 + 1] -= 0.01;
+      if (arr[i * 3 + 1] < -2) arr[i * 3 + 1] = 18;
+    }
+    particles.geometry.attributes.position.needsUpdate = true;
+  }
 
-  // Render Scene
+  updateAudio();
   composer.render();
 }
 
-// Initialize and start
+// ── Init ──
 initThree();
 animate();
