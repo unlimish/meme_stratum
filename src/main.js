@@ -21,6 +21,7 @@ const connectBtn = document.getElementById('connect-btn');
 const hud = document.getElementById('hud');
 const currentYearEl = document.getElementById('current-year');
 const activeMemeEl = document.getElementById('active-meme');
+const activeDurationEl = document.getElementById('active-duration');
 const serialDot = document.getElementById('serial-dot');
 const serialStatus = document.getElementById('serial-status');
 const canvas = document.getElementById('webgl');
@@ -110,6 +111,12 @@ function createMemeTexture(meme) {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.font = '16px "Outfit", sans-serif';
     ctx.fillText(`ACTIVE ERA: ${meme.bornYear} - ${meme.diedYear}`, size/2, 85);
+    
+    // Duration
+    const duration = meme.diedYear - meme.bornYear || 1;
+    ctx.fillStyle = meme.color;
+    ctx.font = 'bold 14px "Outfit", sans-serif';
+    ctx.fillText(`DURATION: ${duration} YEAR${duration > 1 ? 'S' : ''}`, size/2, 115);
 
     // Main Text (Meme representation / punchline)
     ctx.fillStyle = '#ffffff';
@@ -219,8 +226,15 @@ function createPillarMaterials(meme, texture) {
       agedColor = mix(agedColor, vec3(dot(agedColor, vec3(0.299, 0.587, 0.114))), uDepthProgress * 0.4); // Desaturate
       agedColor = mix(agedColor, vec3(0.5, 0.45, 0.35) * dot(agedColor, vec3(0.33)), uDepthProgress * 0.3); // Yellow tint
       
+      // Draw geological stratum layer lines every 20 units (representing 1 year since K_Z = 20)
+      // We check if the world Z coordinate is close to an integer multiple of 20
+      float zFract = fract(vWorldPosition.z / 20.0);
+      float lineIntensity = step(0.97, zFract) + step(zFract, 0.03);
+      vec3 lineGlow = uColor * 1.5;
+
       // Combine lighting effects
       vec3 finalColor = agedColor - vec3(grain) + vec3(scratchPattern);
+      finalColor = mix(finalColor, lineGlow, lineIntensity * 0.6);
       
       // Simple lighting simulation for standard look
       float diffuse = max(0.4, dot(vNormal, normalize(vec3(1.0, 2.0, 3.0))));
@@ -378,11 +392,11 @@ function initThree() {
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
-  // BokehPass for Depth of Field
+  // BokehPass for Depth of Field (wider sharp zone for readability)
   bokehPass = new BokehPass(scene, camera, {
     focus: 15.0,
-    aperture: 0.025,
-    maxblur: 0.015,
+    aperture: 0.008, // Increased from 0.025 to expand the depth of field
+    maxblur: 0.012,
     width: window.innerWidth,
     height: window.innerHeight
   });
@@ -529,9 +543,12 @@ function animate() {
     if (state.activeMeme !== activeMeme) {
       state.activeMeme = activeMeme;
       activeMemeEl.textContent = activeMeme.name;
+      const duration = activeMeme.diedYear - activeMeme.bornYear || 1;
+      activeDurationEl.textContent = `${duration} YEAR${duration > 1 ? 'S' : ''}`;
     }
   } else {
     activeMemeEl.textContent = 'TRANSITION SPACE';
+    activeDurationEl.textContent = '—';
   }
 
   // Bokeh Focus follows the camera target (always sharp at current year depth)

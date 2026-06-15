@@ -240,3 +240,13 @@ h1 {
   color: #fff;
   margin-top: 2px;
 }
+
+.meme-duration-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-color);
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
