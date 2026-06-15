@@ -327,6 +327,21 @@ function createPillarMaterials(meme, texture) {
 let scene, camera, renderer, composer, bokehPass;
 const pillars = [];
 
+// Sliding Timeline Ruler Elements
+const timelineWrapper = document.getElementById('timeline-wrapper');
+const timelineRuler = document.getElementById('timeline-ruler');
+
+// Ambient Particles
+let particles;
+const particleCount = 1000;
+
+// Web Audio API Synthesizer (Museum Art Installation Sound)
+let audioCtx = null;
+let droneOsc = null;
+let subOsc = null;
+let filterNode = null;
+let gainNode = null;
+
 function initThree() {
   scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2('#050505', 0.012);
@@ -387,6 +402,28 @@ function initThree() {
     });
   });
 
+  // Ambient Drifting Particles
+  const particleGeometry = new THREE.BufferGeometry();
+  const particlePositions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    particlePositions[i * 3] = (Math.random() - 0.5) * 35;
+    particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+    particlePositions[i * 3 + 2] = Math.random() * -600 + 50;
+  }
+  particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  const particleMaterial = new THREE.PointsMaterial({
+    color: '#ffffff',
+    size: 0.12,
+    transparent: true,
+    opacity: 0.35,
+    sizeAttenuation: true
+  });
+  particles = new THREE.Points(particleGeometry, particleMaterial);
+  scene.add(particles);
+
+  // Setup HTML timeline elements
+  setupTimelineRuler();
+
   // Post-processing setup
   composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
@@ -406,6 +443,88 @@ function initThree() {
   window.addEventListener('resize', onWindowResize);
 }
 
+function setupTimelineRuler() {
+  const spacing = 60; // Pixels per year
+  for (let year = 2000; year <= 2026; year++) {
+    const ageIndex = year - 2000;
+    const xPos = ageIndex * spacing;
+
+    // Tick line
+    const tick = document.createElement('div');
+    tick.className = 'timeline-tick';
+    if (year % 5 === 0 || year === 2026) {
+      tick.classList.add('major');
+
+      // Year Label text
+      const text = document.createElement('div');
+      text.className = 'timeline-year-text';
+      text.id = `tick-year-${year}`;
+      text.textContent = year;
+      text.style.left = `${xPos}px`;
+      timelineRuler.appendChild(text);
+    }
+    tick.style.left = `${xPos}px`;
+    timelineRuler.appendChild(tick);
+  }
+}
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Low-frequency warm triangle drone (base frequency = 55Hz, A1 note)
+  droneOsc = audioCtx.createOscillator();
+  droneOsc.type = 'triangle';
+  droneOsc.frequency.setValueAtTime(55.0, audioCtx.currentTime);
+
+  // Deep sub rumble sine wave (base frequency = 27.5Hz, A0 note)
+  subOsc = audioCtx.createOscillator();
+  subOsc.type = 'sine';
+  subOsc.frequency.setValueAtTime(27.5, audioCtx.currentTime);
+
+  // Biquad Lowpass filter for dark, warm, smoky texture
+  filterNode = audioCtx.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.setValueAtTime(100.0, audioCtx.currentTime);
+  filterNode.Q.setValueAtTime(4.0, audioCtx.currentTime);
+
+  // Ambient Gain Node
+  gainNode = audioCtx.createGain();
+  gainNode.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+
+  // Connections
+  droneOsc.connect(filterNode);
+  subOsc.connect(filterNode);
+  filterNode.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  // Start oscillators
+  droneOsc.start();
+  subOsc.start();
+
+  // Smooth fade-in
+  gainNode.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 4.0);
+}
+
+function updateAudio() {
+  if (!audioCtx) return;
+
+  // Deeper Z (older) shifts to a lower frequency drone
+  const depthFactor = Math.max(0, Math.min(1, -state.currentZ / 520.0));
+  const targetBaseFreq = 55.0 - depthFactor * 18.35; // Drops from 55Hz (A1) to 36.65Hz (D1)
+
+  // Scroll speed adds Doppler pitch shifts and friction wind sounds
+  const speed = Math.abs(state.targetZ - state.currentZ);
+  const pitchBend = speed * 0.45;
+
+  droneOsc.frequency.setTargetAtTime(targetBaseFreq + pitchBend, audioCtx.currentTime, 0.1);
+
+  // Open filter cutoff on movement
+  const targetFilterFreq = 100.0 + speed * 15.0 + depthFactor * 50.0;
+  filterNode.frequency.setTargetAtTime(targetFilterFreq, audioCtx.currentTime, 0.15);
+}
+
+// --- Interaction Handlers ---
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -509,8 +628,12 @@ async function initSerial() {
 connectBtn.addEventListener('click', async () => {
   overlay.classList.add('hidden');
   hud.classList.remove('hidden');
+  timelineWrapper.classList.remove('hidden');
 
-  // Trigger web audio or other features if needed, and start serial
+  // Trigger web audio sound drone
+  initAudio();
+
+  // Start serial listener
   await initSerial();
 });
 
@@ -527,6 +650,41 @@ function animate() {
   const computedYear = Math.round(2026 + (state.currentZ / K_Z));
   const activeYear = Math.max(2000, Math.min(2026, computedYear));
   currentYearEl.textContent = activeYear;
+
+  // Sliding Timeline Ruler positioning
+  // Offset moves timeline-ruler left/right relative to middle pointer
+  const spacing = 60; // Pixels per year
+  const currentYearOffset = (2026 - 2000) + (state.currentZ / K_Z);
+  const rulerX = -currentYearOffset * spacing;
+  timelineRuler.style.transform = `translateX(${rulerX}px)`;
+
+  // Toggle highlight classes on the year ticks
+  document.querySelectorAll('.timeline-year-text').forEach(el => {
+    if (el.id === `tick-year-${activeYear}`) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+
+  // Ambient particle drift animation
+  if (particles) {
+    const posAttr = particles.geometry.attributes.position;
+    const array = posAttr.array;
+    for (let i = 0; i < particleCount; i++) {
+      array[i * 3 + 1] -= 0.012; // slow downward drift
+      array[i * 3] += Math.sin(Date.now() * 0.0008 + i) * 0.003; // side sway
+
+      // Wrap particles back up to create loop
+      if (array[i * 3 + 1] < -10) {
+        array[i * 3 + 1] = 10;
+      }
+    }
+    posAttr.needsUpdate = true;
+  }
+
+  // Modulate audio parameters
+  updateAudio();
 
   // Track active layer
   let activeMeme = null;
