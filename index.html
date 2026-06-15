@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meme Stratum - ミームの地層</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- 3D Canvas -->
+    <canvas id="webgl"></canvas>
+
+    <!-- Overlay for Web Serial activation -->
+    <div id="overlay">
+      <div class="overlay-content">
+        <h1>Meme Stratum</h1>
+        <p class="subtitle">ミームの地層</p>
+        <div class="instruction">
+          <p>Time exploration via Rotary Encoder</p>
+          <p class="japanese">ロータリーエンコーダーによる時間の探索</p>
+        </div>
+        <button id="connect-btn">START / CONNECT SERIAL</button>
+        <p class="fallback-note">Or use Scroll / Drag / Arrow Keys to explore offline</p>
+      </div>
+    </div>
+
+    <!-- Minimal HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div class="year-label">TIME DEPTH</div>
+        <div id="current-year" class="year-value">2026</div>
+      </div>
+      <div class="hud-right">
+        <div class="status-indicator">
+          <span class="pulse-dot" id="serial-dot"></span>
+          <span id="serial-status">OFFLINE</span>
+        </div>
+        <div class="meme-title-container">
+          <div class="meme-title-label">ACTIVE LAYER</div>
+          <div id="active-meme" class="meme-title-value">Pepe the Frog</div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
