@@ -45,6 +45,7 @@ const timelineRuler   = document.getElementById('timeline-ruler');
 // ── Three.js references ───────────────────────
 let scene, camera, renderer, composer, bokehPass;
 const slabs = [];
+let camLookAtZ = -10; // updated dynamically after row layout in initThree
 
 // Audio
 let audioCtx = null, droneOsc = null, subOsc = null, filterNode = null, gainNode = null;
@@ -305,36 +306,70 @@ function initThree() {
   floor.receiveShadow = true;
   scene.add(floor);
 
+  // ── Row assignment (interval scheduling on X-axis) ──
+  // Memes whose active periods overlap in X get placed in separate Z rows.
+  // Sort by bornYear so earlier memes get the front row first.
+  const ROW_DEPTH   = 9.0;   // gap between rows (Z direction)
+  const FRONT_Z     = -8.0;  // z position of row 0 (closest to camera)
+  const rowEndX     = [];    // tracks the rightmost X used in each row
+
+  const sortedForRows = [...memeData].sort((a, b) => a.bornYear - b.bornYear);
+  const rowMap        = new Map(); // meme.id → row index
+
+  for (const meme of sortedForRows) {
+    const duration = Math.max(0.5, meme.diedYear - meme.bornYear);
+    const startX   = yearToX(meme.bornYear);
+    const endX     = yearToX(meme.bornYear) + K_X * duration;
+
+    // Find the first row where this meme fits (no X overlap)
+    let row = rowEndX.findIndex(rx => rx + 2 <= startX);
+    if (row === -1) { row = rowEndX.length; rowEndX.push(endX); }
+    else              rowEndX[row] = endX;
+
+    rowMap.set(meme.id, row);
+  }
+
+  const numRows = rowEndX.length;
+
   // ── Build Slabs ──
   memeData.forEach((meme) => {
-    const duration  = Math.max(0.5, meme.diedYear - meme.bornYear);
-    const width     = K_X * (meme.bornYear === meme.diedYear ? 0.4 : duration * 0.3); // Width on X = duration (thick = long-lived)
-    const height    = 5.5;
-    const depthZ    = 6.0; // All slabs same depth on Z; they're like playing cards lined up
+    const duration = Math.max(0.5, meme.diedYear - meme.bornYear);
+    const width    = K_X * (meme.bornYear === meme.diedYear ? 0.4 : duration);
 
-    const centerX   = yearToX(meme.bornYear) + (K_X * duration) / 2;
+    // Height: scales with longevity so long-lived memes are visually taller
+    const height   = THREE.MathUtils.clamp(3.0 + duration * 0.22, 3.2, 8.5);
+    const depthZ   = 5.5;
 
-    // Stagger slabs gently on Z (-3 to +3) so they don't all sit in one plane
-    const phaseZ    = Math.sin(meme.bornYear * 7.3 + meme.name.charCodeAt(0) * 0.5) * 4;
+    const centerX  = yearToX(meme.bornYear) + width / 2;
+    const row      = rowMap.get(meme.id);
 
-    const geo = new THREE.BoxGeometry(width, height, depthZ);
+    // Row 0 = front (closest to camera), each subsequent row steps back
+    const posZ     = FRONT_Z - row * ROW_DEPTH;
+    const posY     = height / 2 - 2.0; // sit on floor
 
-    const texture  = createMemeTexture(meme);
-    const mats     = createSlabMaterials(meme, texture);
+    const geo  = new THREE.BoxGeometry(width, height, depthZ);
+    const tex  = createMemeTexture(meme);
+    const mats = createSlabMaterials(meme, tex);
 
     const mesh = new THREE.Mesh(geo, mats);
-    mesh.position.set(centerX, height / 2 - 2, -10 + phaseZ);
+    mesh.position.set(centerX, posY, posZ);
     mesh.castShadow    = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
 
-    slabs.push({
-      mesh,
-      data: meme,
-      startX: centerX - width / 2,
-      endX:   centerX + width / 2,
-    });
+    slabs.push({ mesh, data: meme, startX: centerX - width / 2, endX: centerX + width / 2 });
   });
+
+  // Pull camera back so all rows are visible
+  const camZ = FRONT_Z + 30 + numRows * ROW_DEPTH * 0.5;
+  const camY = 10 + numRows * 1.5;
+  camLookAtZ = FRONT_Z - (numRows - 1) * ROW_DEPTH * 0.5;
+  camera.position.set(yearToX(CURRENT_YEAR), camY, camZ);
+  camera.lookAt(yearToX(CURRENT_YEAR), 0, camLookAtZ);
+  // Update initial state.targetX to point to present (rightmost X)
+  state.targetX = yearToX(CURRENT_YEAR);
+  state.currentX = yearToX(CURRENT_YEAR);
+
 
   // ── Particles ──
   const pGeo = new THREE.BufferGeometry();
@@ -542,7 +577,8 @@ function animate() {
 
   // Camera tracks along X, maintaining elevated angle
   camera.position.x = state.currentX;
-  camera.lookAt(state.currentX, 0, -10);
+  camera.lookAt(state.currentX, 0, camLookAtZ);
+
 
   // Bokeh focus: camera is at z=20, slabs are at z≈-10 → distance ≈30
   // Adjust focus to distance to active slab (keep current for now)
