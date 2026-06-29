@@ -25,7 +25,18 @@ const state = {
   timeRange: { min: -TOTAL_YEARS * K_Z, max: 0 },
   activeMeme: null,
   isSerialConnected: false,
+  autoScrolling: false,
 };
+
+// ── Idle / auto-scroll ──
+let idleTimer = null;
+const IDLE_DELAY = 20000;
+const AUTO_SCROLL_SPEED = 3.5;
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  state.autoScrolling = false;
+  idleTimer = setTimeout(() => { state.autoScrolling = true; }, IDLE_DELAY);
+}
 
 // ── DOM ──
 const overlay        = document.getElementById('overlay');
@@ -296,8 +307,8 @@ function initThree() {
       depthWrite: false,
     });
 
-    // Panel size scales with lifespan — long-lived memes get huge
-    const panelSize = 1.0 + (dur / 22) * 5.0; // 1.0–6.0
+    // Exponential panel sizing — duration difference felt dramatically
+    const panelSize = 1.0 + (Math.exp(dur / 10) - 1) * 0.7; // 1.07–6.62
     const panelH = panelSize * 1.35;
     const geo  = new THREE.PlaneGeometry(panelSize, panelH);
     const mesh = new THREE.Mesh(geo, mat);
@@ -404,29 +415,33 @@ let isDragging = false, lastY = 0;
 window.addEventListener('wheel', e => {
   state.targetZ -= e.deltaY * 0.1;
   clampZ();
+  resetIdleTimer();
 }, { passive: true });
 
-window.addEventListener('mousedown', e => { isDragging = true; lastY = e.clientY; });
+window.addEventListener('mousedown', e => { isDragging = true; lastY = e.clientY; resetIdleTimer(); });
 window.addEventListener('mousemove', e => {
   if (!isDragging) return;
   state.targetZ += (e.clientY - lastY) * 0.15;
   lastY = e.clientY;
   clampZ();
+  resetIdleTimer();
 });
-window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mouseup', () => { isDragging = false; resetIdleTimer(); });
 
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight')   state.targetZ -= K_Z;
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') state.targetZ += K_Z;
   clampZ();
+  resetIdleTimer();
 });
 
 let lastTouchY = 0;
-window.addEventListener('touchstart', e => { lastTouchY = e.touches[0].clientY; });
+window.addEventListener('touchstart', e => { lastTouchY = e.touches[0].clientY; resetIdleTimer(); });
 window.addEventListener('touchmove', e => {
   state.targetZ += (e.touches[0].clientY - lastTouchY) * 0.12;
   lastTouchY = e.touches[0].clientY;
   clampZ();
+  resetIdleTimer();
 }, { passive: true });
 
 function clampZ() {
@@ -498,6 +513,7 @@ function startExperience() {
   serialIndicator.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
   initAudio();
+  resetIdleTimer();
 }
 
 connectBtn.addEventListener('click', () => startExperience());
@@ -515,6 +531,15 @@ function animate() {
 
   // Smooth interpolation
   state.currentZ = THREE.MathUtils.lerp(state.currentZ, state.targetZ, 0.06);
+
+  // Auto-scroll when idle — slowly travel forward in time
+  if (state.autoScrolling) {
+    state.targetZ += AUTO_SCROLL_SPEED * 0.016;
+    if (state.targetZ >= state.timeRange.max + 5) {
+      state.targetZ = state.timeRange.min - 5;
+    }
+    clampZ();
+  }
 
   // Camera follows Z (time travel) — subtle sway
   const t = performance.now() * 0.001;
