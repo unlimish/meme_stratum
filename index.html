@@ -3,54 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meme Stratum - ミームの地層</title>
+    <title>Meme Stratum — ミームの地層</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Outfit:wght@100;200;300;400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <!-- Meme Fullscreen Background (two layers for cross-fade) -->
+    <div id="meme-bg-1"></div>
+    <div id="meme-bg-2"></div>
+
     <!-- 3D Canvas -->
     <canvas id="webgl"></canvas>
 
-    <!-- Overlay for Web Serial activation -->
+    <!-- Overlay for Start -->
     <div id="overlay">
       <div class="overlay-content">
-        <h1>Meme Stratum</h1>
-        <p class="subtitle">ミームの地層</p>
-        <div class="instruction">
-          <p>Time exploration via Rotary Encoder</p>
-          <p class="japanese">ロータリーエンコーダーによる時間の探索</p>
+        <div class="overlay-title">MEME<br>STRATUM</div>
+        <div class="overlay-sub">ミームの地層</div>
+        <div class="overlay-desc">
+          <span>Scroll to excavate 26 years of internet culture</span>
+          <span class="jp">スクロールで26年のインターネット文化を発掘する</span>
         </div>
-        <button id="connect-btn">START / CONNECT SERIAL</button>
-        <p class="fallback-note">Or use Scroll / Drag / Arrow Keys to explore offline</p>
+        <button id="connect-btn">ENTER</button>
+        <div class="overlay-serial">
+          <button id="serial-btn" class="serial-link">CONNECT ROTARY ENCODER</button>
+        </div>
       </div>
     </div>
 
-    <!-- Sliding Timeline Ruler -->
+    <!-- Year HUD — giant typographic year -->
+    <div id="hud" class="hidden">
+      <div class="hud-year">
+        <span id="current-year">2026</span>
+      </div>
+      <div class="hud-era" id="era-label"></div>
+    </div>
+
+    <!-- Active Meme Info (bottom) -->
+    <div id="meme-info" class="hidden">
+      <div class="meme-info-inner">
+        <div class="meme-info-name" id="active-meme">— —</div>
+        <div class="meme-info-years" id="active-duration"></div>
+      </div>
+    </div>
+
+    <!-- Serial status -->
+    <div id="serial-indicator" class="hidden">
+      <span class="pulse-dot" id="serial-dot"></span>
+      <span id="serial-status">OFFLINE</span>
+    </div>
+
+    <!-- Timeline -->
     <div id="timeline-wrapper" class="hidden">
       <div id="timeline-pointer"></div>
       <div id="timeline-ruler"></div>
-    </div>
-
-    <!-- Minimal HUD -->
-    <div id="hud" class="hidden">
-      <div class="hud-left">
-        <div class="year-label">TIME DEPTH</div>
-        <div id="current-year" class="year-value">2026</div>
-      </div>
-      <div class="hud-right">
-        <div class="status-indicator">
-          <span class="pulse-dot" id="serial-dot"></span>
-          <span id="serial-status">OFFLINE</span>
-        </div>
-        <div class="meme-title-container">
-          <div class="meme-title-label">ACTIVE LAYER</div>
-          <div id="active-meme" class="meme-title-value">Pepe the Frog</div>
-          <div id="active-duration" class="meme-duration-value">21 YEARS</div>
-        </div>
-
-      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

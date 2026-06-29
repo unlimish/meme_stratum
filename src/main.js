@@ -1,486 +1,436 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { memeData } from './memeData.js';
 
 // ─────────────────────────────────────────────
-//  SPATIAL MODEL (revised for X-axis travel)
+//  MEME STRATUM — Kinetic Typography Art Piece
 //
-//  Concept: User stands at (x, y=8, z=12) and looks down at the strata below.
-//  Each meme is a tall slab standing on the X-axis.
-//    X-axis   = time (left = 2000, right = 2026)
-//    Z-axis   = depth of the slab (duration of the meme)
-//    Camera X = current year being explored
-//
-//  K_X = 12 units per year on X-axis
+//  Concept:
+//    - 3D canvas is a warm wall with pinned paper notes
+//    - Scrolling through time reveals meme names as huge text
+//    - Current year is displayed as a giant semi-transparent number
+//    - Meme images appear as pinned notes on the timeline wall
+//    - Popularity duration determines paper size
+//    - Older memes show yellowed, worn paper with stains
 // ─────────────────────────────────────────────
 
-const K_X = 12;         // 1 year = 12 units on X
+const K_Z = 10;
 const CURRENT_YEAR = 2026;
 const START_YEAR   = 2000;
-const TOTAL_YEARS  = CURRENT_YEAR - START_YEAR; // 26
+const TOTAL_YEARS  = CURRENT_YEAR - START_YEAR;
 
-// ── Global App State ─────────────────────────
+// ── State ──
 const state = {
-  currentX: 0,   // camera X position (lerped)
-  targetX:  0,   // goal X
-  isSerialConnected: false,
+  currentZ: -245,
+  targetZ:  -245,
+  timeRange: { min: -TOTAL_YEARS * K_Z, max: 0 },
   activeMeme: null,
+  isSerialConnected: false,
 };
 
-// ── DOM Elements ─────────────────────────────
-const overlay       = document.getElementById('overlay');
-const connectBtn    = document.getElementById('connect-btn');
-const hud           = document.getElementById('hud');
-const currentYearEl = document.getElementById('current-year');
-const activeMemeEl  = document.getElementById('active-meme');
-const activeDurationEl = document.getElementById('active-duration');
-const serialDot     = document.getElementById('serial-dot');
-const serialStatus  = document.getElementById('serial-status');
-const webglCanvas   = document.getElementById('webgl');
+// ── DOM ──
+const overlay        = document.getElementById('overlay');
+const connectBtn     = document.getElementById('connect-btn');
+const serialBtn      = document.getElementById('serial-btn');
+const hud            = document.getElementById('hud');
+const currentYearEl  = document.getElementById('current-year');
+const eraLabel       = document.getElementById('era-label');
+const memeInfo       = document.getElementById('meme-info');
+const activeMemeEl   = document.getElementById('active-meme');
+const activeDurEl    = document.getElementById('active-duration');
+const memeBgEl       = document.getElementById('meme-bg');
+const memeBgEl2      = document.getElementById('meme-bg-2');
+let bgActiveIsFirst  = true;
+const serialDot      = document.getElementById('serial-dot');
+const serialStatus   = document.getElementById('serial-status');
+const serialIndicator = document.getElementById('serial-indicator');
+const webglCanvas    = document.getElementById('webgl');
 const timelineWrapper = document.getElementById('timeline-wrapper');
 const timelineRuler   = document.getElementById('timeline-ruler');
 
-// ── Three.js references ───────────────────────
-let scene, camera, renderer, composer, bokehPass;
-const slabs = [];
-let camLookAtZ = -10; // updated dynamically after row layout in initThree
+// ── Three.js ──
+let scene, camera, renderer;
+let particles;
+const PARTICLE_COUNT = 1200;
+const floatingPanels = [];
 
 // Audio
-let audioCtx = null, droneOsc = null, subOsc = null, filterNode = null, gainNode = null;
-
-// Particles
-let particles;
-const PARTICLE_COUNT = 800;
+let audioCtx, droneOsc, subOsc, filterNode, gainNode;
 
 // ─────────────────────────────────────────────
-//  TEXTURE GENERATOR
-//  Draws the meme image on a canvas texture.
-//  On first call draws a colored placeholder.
-//  When the image loads, redraws with the real image.
+//  ERA MAPPING
 // ─────────────────────────────────────────────
+function getEraLabel(year) {
+  if (year <= 2004) return 'THE PRIMORDIAL ERA';
+  if (year <= 2008) return 'THE VIRAL VIDEO AGE';
+  if (year <= 2012) return 'THE GOLDEN AGE';
+  if (year <= 2016) return 'THE SOCIAL MEDIA SURGE';
+  if (year <= 2020) return 'THE POST-IRONIC ERA';
+  return 'THE ALGORITHMIC AGE';
+}
+
+// ─────────────────────────────────────────────
+//  MEME TEXTURE — paper note pinned to wall
+// ─────────────────────────────────────────────
+function lighten(hex, f) {
+  const r = Math.min(255, parseInt(hex.slice(1,3),16) + (255-parseInt(hex.slice(1,3),16))*f|0);
+  const g = Math.min(255, parseInt(hex.slice(3,5),16) + (255-parseInt(hex.slice(3,5),16))*f|0);
+  const b = Math.min(255, parseInt(hex.slice(5,7),16) + (255-parseInt(hex.slice(5,7),16))*f|0);
+  return `rgb(${r},${g},${b})`;
+}
+function darken(hex, f) {
+  const r = parseInt(hex.slice(1,3),16) * f | 0;
+  const g = parseInt(hex.slice(3,5),16) * f | 0;
+  const b = parseInt(hex.slice(5,7),16) * f | 0;
+  return `rgb(${r},${g},${b})`;
+}
+
 function createMemeTexture(meme) {
-  const SIZE = 512;
-  const cvs  = document.createElement('canvas');
-  const ctx  = cvs.getContext('2d');
-  cvs.width  = SIZE;
-  cvs.height = SIZE;
+  const age = CURRENT_YEAR - meme.bornYear;
+  const ageFactor = Math.min(age / 26, 1); // 0 = fresh, 1 = oldest
+  const S = 512;
+  const cvs = document.createElement('canvas');
+  const ctx = cvs.getContext('2d');
+  cvs.width = S; cvs.height = S;
 
-  const texture = new THREE.CanvasTexture(cvs);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
 
-  function draw(image = null) {
-    ctx.clearRect(0, 0, SIZE, SIZE);
+  const M = 10; // margin for shadow
 
-    // Dark background
-    ctx.fillStyle = '#050505';
-    ctx.fillRect(0, 0, SIZE, SIZE);
+  function draw(img) {
+    // ── Drop shadow ──
+    const shadowAlpha = 0.12 + ageFactor * 0.06;
+    ctx.fillStyle = `rgba(40, 30, 20, ${shadowAlpha})`;
+    ctx.fillRect(M + 3, M + 4, S - M * 2, S - M * 2);
 
-    // Colour wash (era color)
-    const grad = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, SIZE * 0.75);
-    grad.addColorStop(0, meme.color + '33');
-    grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, SIZE, SIZE);
+    // ── Paper base — yellowed with age ──
+    const y = ageFactor * 30;
+    ctx.fillStyle = `rgb(${250 - y * 0.3 | 0}, ${242 - y * 0.2 | 0}, ${220 - y * 0.6 | 0})`;
+    ctx.fillRect(M, M, S - M * 2, S - M * 2);
 
-    // Real meme photo (centered, aspect-fit, full bleed with slight transparency)
-    if (image) {
-      const aspect = image.width / image.height;
-      let w = SIZE, h = SIZE;
-      if (aspect > 1) { h = SIZE / aspect; }
-      else            { w = SIZE * aspect; }
+    // ── Paper fibre noise ──
+    const imageData = ctx.getImageData(0, 0, S, S);
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random() - 0.5) * 6;
+      d[i] += n;
+      d[i + 1] += n;
+      d[i + 2] += n;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    // ── Stains from age ──
+    if (ageFactor > 0.05) {
+      for (let s = 0; s < 5 + ageFactor * 15; s++) {
+        const sx = M + 20 + Math.random() * (S - M * 2 - 40);
+        const sy = M + 20 + Math.random() * (S - M * 2 - 40);
+        const sr = 5 + Math.random() * 20;
+        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+        grad.addColorStop(0, `rgba(160, 130, 80, ${ageFactor * 0.1})`);
+        grad.addColorStop(1, 'rgba(160, 130, 80, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ── Corner wear ──
+    const cornerR = 20 + ageFactor * 30;
+    for (const [cx, cy] of [[M, M], [S - M, M], [M, S - M], [S - M, S - M]]) {
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cornerR);
+      grad.addColorStop(0, `rgba(120, 90, 60, ${ageFactor * 0.15})`);
+      grad.addColorStop(1, 'rgba(120, 90, 60, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cornerR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ── Meme image ──
+    if (img) {
+      const m = 40;
+      const ds = S - M * 2 - m * 2;
+      const a = img.width / img.height;
+      let w = ds, h = ds;
+      if (a > 1) h = ds / a;
+      else w = ds * a;
       ctx.save();
-      ctx.globalAlpha = 0.90;
-      ctx.drawImage(image, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
       ctx.restore();
     }
 
-    // Very thin neon border (meme's era colour)
-    ctx.strokeStyle = meme.color;
-    ctx.lineWidth   = 3;
-    ctx.strokeRect(4, 4, SIZE - 8, SIZE - 8);
+    // ── Duration timeline bar ──
+    const barY = S - M - 40;
+    const barH = 6;
+    const barMarginX = 50;
+    const barW = S - M * 2 - barMarginX * 2;
+    const barLeft = S / 2 - barW / 2;
 
-    // Bottom gradient bar for text legibility
-    const barGrad = ctx.createLinearGradient(0, SIZE - 100, 0, SIZE);
-    barGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    barGrad.addColorStop(1, 'rgba(0,0,0,0.88)');
+    // Background track (2000 → 2026)
+    ctx.fillStyle = 'rgba(40, 30, 20, 0.1)';
+    ctx.fillRect(barLeft, barY, barW, barH);
+
+    // Active period (bornYear → diedYear)
+    const totalSpan = CURRENT_YEAR - START_YEAR;
+    const t0 = (meme.bornYear - START_YEAR) / totalSpan;
+    const t1 = (meme.diedYear - START_YEAR) / totalSpan;
+    const activeLeft = barLeft + t0 * barW;
+    const activeW = (t1 - t0) * barW;
+
+    const barGrad = ctx.createLinearGradient(activeLeft, barY, activeLeft + activeW, barY);
+    barGrad.addColorStop(0, meme.color + 'cc');
+    barGrad.addColorStop(1, meme.color + '66');
     ctx.fillStyle = barGrad;
-    ctx.fillRect(0, SIZE - 100, SIZE, 100);
+    ctx.fillRect(activeLeft, barY, activeW, barH);
 
-    // Meme name
-    ctx.fillStyle   = '#ffffff';
-    ctx.textAlign   = 'center';
+    // Year labels
+    ctx.fillStyle = `rgba(40, 30, 20, ${0.3 + ageFactor * 0.2})`;
+    ctx.font = `${S * 0.022}px Inter, "Helvetica Neue", sans-serif`;
     ctx.textBaseline = 'bottom';
-    ctx.font        = 'bold 22px "Outfit", sans-serif';
-    ctx.shadowColor  = 'rgba(0,0,0,1)';
-    ctx.shadowBlur   = 8;
-    ctx.fillText(meme.name.toUpperCase(), SIZE / 2, SIZE - 14);
+    ctx.textAlign = 'left';
+    ctx.fillText(meme.bornYear, barLeft, barY - 2);
+    ctx.textAlign = 'right';
+    ctx.fillText(meme.diedYear, barLeft + barW, barY - 2);
 
-    // Year range
-    ctx.font      = '15px "Outfit", sans-serif';
-    ctx.fillStyle = meme.color;
-    ctx.shadowBlur = 4;
-    ctx.fillText(`${meme.bornYear} – ${meme.diedYear}`, SIZE / 2, SIZE - 44);
+    // ── Meme name at bottom ──
+    ctx.fillStyle = `rgba(40, 30, 20, ${0.4 + ageFactor * 0.2})`;
+    ctx.font = `bold ${S * 0.03}px Inter, "Helvetica Neue", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(meme.name, S / 2, S - M - 5);
 
-    ctx.shadowBlur   = 0;
-    texture.needsUpdate = true;
+    // ── Thumbtack at top centre ──
+    const px = S / 2;
+    const py = M + 10;
+
+    // Pin shadow
+    ctx.beginPath();
+    ctx.arc(px + 2, py + 3, 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fill();
+
+    // Pin head (meme colour)
+    const pinGrad = ctx.createRadialGradient(px - 2, py - 1, 1, px, py, 8);
+    pinGrad.addColorStop(0, lighten(meme.color, 0.5));
+    pinGrad.addColorStop(0.4, meme.color);
+    pinGrad.addColorStop(1, darken(meme.color, 0.4));
+    ctx.beginPath();
+    ctx.arc(px, py, 8, 0, Math.PI * 2);
+    ctx.fillStyle = pinGrad;
+    ctx.fill();
+
+    // Pin highlight
+    ctx.beginPath();
+    ctx.arc(px - 2, py - 2, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fill();
+
+    tex.needsUpdate = true;
   }
 
-  draw(); // placeholder immediately
-
+  draw(null);
   if (meme.imageUrl) {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload  = () => draw(img);
-    img.onerror = () => console.warn('Image failed:', meme.name);
-    img.src = meme.imageUrl;
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => draw(im);
+    im.onerror = () => {};
+    im.src = meme.imageUrl;
   }
-
-  return texture;
+  return tex;
 }
 
 // ─────────────────────────────────────────────
-//  SLAB MATERIAL BUILDER
-//  Front  (+Z face): full meme texture
-//  Sides  (X faces): slit-scan edge extrusion
-//  Top    (+Y face): thin glowing top stripe
-//  Back/Bottom:      dark absorbing material
-// ─────────────────────────────────────────────
-function createSlabMaterials(meme, texture) {
-  const depthProgress = Math.max(0, Math.min(1, (CURRENT_YEAR - meme.bornYear) / 26));
-
-  const vertexShader = /* glsl */`
-    varying vec2 vUv;
-    varying vec3 vWorldPos;
-    varying vec3 vNormal;
-    void main() {
-      vUv        = uv;
-      vNormal    = normalize(normalMatrix * normal);
-      vec4 wp    = modelMatrix * vec4(position, 1.0);
-      vWorldPos  = wp.xyz;
-      gl_Position = projectionMatrix * viewMatrix * wp;
-    }
-  `;
-
-  const agingGlsl = /* glsl */`
-    float hash(vec2 p){
-      p = fract(p * vec2(123.34,456.21));
-      p += dot(p, p+45.32);
-      return fract(p.x*p.y);
-    }
-    vec3 applyAge(vec3 col, float depth, vec2 uv, vec3 worldPos){
-      float grain   = hash(uv * 900.0 + worldPos.xz * 3.0) * 0.10 * depth;
-      float scratch = step(0.994, hash(vec2(uv.x * 280.0, 0.0)))
-                    * hash(vec2(0.0, worldPos.z * 12.0)) * 0.3 * depth;
-      col = mix(col, vec3(dot(col, vec3(0.299,0.587,0.114))), depth * 0.45);
-      col = mix(col, vec3(0.48,0.42,0.32) * dot(col, vec3(0.33)), depth * 0.25);
-      return col - grain + scratch;
-    }
-  `;
-
-  const frontFrag = /* glsl */`
-    uniform sampler2D uTex;
-    uniform float uAge;
-    uniform vec3  uColor;
-    varying vec2  vUv;
-    varying vec3  vWorldPos;
-    varying vec3  vNormal;
-    ${agingGlsl}
-    void main(){
-      vec4 t = texture2D(uTex, vUv);
-      vec3 c = applyAge(t.rgb, uAge, vUv, vWorldPos);
-      gl_FragColor = vec4(c, 1.0);
-    }
-  `;
-
-  const sideFrag = (edgeUv) => /* glsl */`
-    uniform sampler2D uTex;
-    uniform float uAge;
-    uniform vec3  uColor;
-    varying vec2  vUv;
-    varying vec3  vWorldPos;
-    varying vec3  vNormal;
-    ${agingGlsl}
-    void main(){
-      vec2 uv2 = ${edgeUv};
-      vec4 t   = texture2D(uTex, uv2);
-      vec3 c   = applyAge(t.rgb, uAge, vUv, vWorldPos);
-
-      // Vertical year-ring lines (every K_X = 12 units on X)
-      float xFrac = fract(vWorldPos.x / 12.0);
-      float ring  = step(0.96, xFrac) + step(xFrac, 0.04);
-      c = mix(c, uColor * 1.8, ring * 0.55);
-
-      float diff = max(0.35, dot(vNormal, normalize(vec3(0.0, 3.0, 2.0))));
-      gl_FragColor = vec4(c * diff, 1.0);
-    }
-  `;
-
-  const topFrag = /* glsl */`
-    uniform vec3  uColor;
-    varying vec3  vWorldPos;
-    void main(){
-      float xFrac = fract(vWorldPos.x / 12.0);
-      float ring  = step(0.93, xFrac) + step(xFrac, 0.07);
-      vec3  base  = uColor * 0.25;
-      vec3  glow  = uColor * 1.5;
-      gl_FragColor = vec4(mix(base, glow, ring), 1.0);
-    }
-  `;
-
-  const darkFrag = /* glsl */`
-    uniform vec3 uColor;
-    void main(){
-      gl_FragColor = vec4(uColor * 0.05, 1.0);
-    }
-  `;
-
-  const uniforms = {
-    uTex:   { value: texture },
-    uAge:   { value: depthProgress },
-    uColor: { value: new THREE.Color(meme.color) },
-  };
-
-  // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z
-  return [
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: sideFrag(`vec2(1.0, vUv.y)`), uniforms }), // right
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: sideFrag(`vec2(0.0, vUv.y)`), uniforms }), // left
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: topFrag,                      uniforms }), // top
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: darkFrag,                     uniforms }), // bottom
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: frontFrag,                    uniforms }), // front (+Z)
-    new THREE.ShaderMaterial({ vertexShader, fragmentShader: darkFrag,                     uniforms }), // back  (-Z)
-  ];
-}
-
-// ─────────────────────────────────────────────
-//  SCENE INIT
+//  THREE.JS SCENE — atmospheric background
 // ─────────────────────────────────────────────
 function initThree() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color('#030408');
-  scene.fog = new THREE.Fog('#030408', 30, 180);
+  scene.fog = new THREE.FogExp2('#c4b8a5', 0.006);
 
-  // ── Camera: elevated, angled down, looking along X axis ──
-  // Position: slightly elevated and forward on Z, looking toward the slabs
-  camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 500);
-  camera.position.set(yearToX(CURRENT_YEAR), 14, 20);
-  camera.lookAt(yearToX(CURRENT_YEAR), 0, -10);
+  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 400);
+  camera.position.set(0, 0, 10);
 
-  // ── Renderer ──
-  renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.2;
+  renderer.toneMappingExposure = 0.9;
 
-  // ── Lighting ──
-  // Very dim ambient (museum darkness)
-  scene.add(new THREE.AmbientLight('#1a1a2e', 1.0));
+  // Warm wall lighting
+  scene.add(new THREE.AmbientLight('#fff8f0', 0.7));
+  const dir = new THREE.DirectionalLight('#ffe8d0', 0.5);
+  dir.position.set(5, 10, 15);
+  scene.add(dir);
 
-  // Primary spotlight from above-left (dramatic raking light)
-  const spot1 = new THREE.SpotLight('#ffffff', 4.5, 200, Math.PI / 6, 0.4, 1.5);
-  spot1.position.set(-20, 35, 25);
-  spot1.castShadow = true;
-  spot1.shadow.bias = -0.001;
-  scene.add(spot1);
-  scene.add(spot1.target);
+  // ── Floating meme panels in 3D space ──
+  // Positioned along Z-axis (time) as pinned notes on a wall
+  const sorted = [...memeData].sort((a,b) => a.bornYear - b.bornYear);
+  const LANE_COUNT = 10;
+  const LANE_W = 0.5;
+  const laneMap = new Map();
+  const laneNextY = new Float64Array(LANE_COUNT);
+  const laneEndZ  = new Float64Array(LANE_COUNT).fill(-Infinity);
 
-  // Subtle blue fill from right (cool ambient)
-  const fill = new THREE.DirectionalLight('#2233aa', 0.4);
-  fill.position.set(40, 10, 5);
-  scene.add(fill);
-
-  // ── Floor plane (reflective dark surface like polished concrete) ──
-  const floorGeo = new THREE.PlaneGeometry(400, 200);
-  const floorMat = new THREE.MeshStandardMaterial({
-    color: '#080c14',
-    roughness: 0.15,
-    metalness: 0.6,
-  });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -2.0;
-  floor.receiveShadow = true;
-  scene.add(floor);
-
-  // ── Row assignment (interval scheduling on X-axis) ──
-  // Memes whose active periods overlap in X get placed in separate Z rows.
-  // Sort by bornYear so earlier memes get the front row first.
-  const ROW_DEPTH   = 9.0;   // gap between rows (Z direction)
-  const FRONT_Z     = -8.0;  // z position of row 0 (closest to camera)
-  const rowEndX     = [];    // tracks the rightmost X used in each row
-
-  const sortedForRows = [...memeData].sort((a, b) => a.bornYear - b.bornYear);
-  const rowMap        = new Map(); // meme.id → row index
-
-  for (const meme of sortedForRows) {
-    const duration = Math.max(0.5, meme.diedYear - meme.bornYear);
-    const startX   = yearToX(meme.bornYear);
-    const endX     = yearToX(meme.bornYear) + K_X * duration;
-
-    // Find the first row where this meme fits (no X overlap)
-    let row = rowEndX.findIndex(rx => rx + 2 <= startX);
-    if (row === -1) { row = rowEndX.length; rowEndX.push(endX); }
-    else              rowEndX[row] = endX;
-
-    rowMap.set(meme.id, row);
+  // Round-robin lane assignment with vertical stacking within each lane
+  for (let i = 0; i < sorted.length; i++) {
+    const m = sorted[i];
+    const lane = i % LANE_COUNT;
+    laneMap.set(m.id, lane);
   }
 
-  const numRows = rowEndX.length;
+  for (const meme of memeData) {
+    const dur   = Math.max(1, meme.diedYear - meme.bornYear);
+    const lenZ  = Math.max(2, dur * K_Z);
+    const posZ  = (meme.bornYear - CURRENT_YEAR) * K_Z + lenZ / 2;
+    const lane  = laneMap.get(meme.id);
+    const posX  = (lane - (LANE_COUNT - 1) / 2) * LANE_W;
 
-  // ── Build Slabs ──
-  memeData.forEach((meme) => {
-    const duration = Math.max(0.5, meme.diedYear - meme.bornYear);
-    const width    = K_X * (meme.bornYear === meme.diedYear ? 0.4 : duration);
-
-    // Height: scales with longevity so long-lived memes are visually taller
-    const height   = THREE.MathUtils.clamp(3.0 + duration * 0.22, 3.2, 8.5);
-    const depthZ   = 5.5;
-
-    const centerX  = yearToX(meme.bornYear) + width / 2;
-    const row      = rowMap.get(meme.id);
-
-    // Row 0 = front (closest to camera), each subsequent row steps back
-    const posZ     = FRONT_Z - row * ROW_DEPTH;
-    const posY     = height / 2 - 2.0; // sit on floor
-
-    const geo  = new THREE.BoxGeometry(width, height, depthZ);
     const tex  = createMemeTexture(meme);
-    const mats = createSlabMaterials(meme, tex);
+    const mat  = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
 
-    const mesh = new THREE.Mesh(geo, mats);
-    mesh.position.set(centerX, posY, posZ);
-    mesh.castShadow    = true;
-    mesh.receiveShadow = true;
+    // Panel size scales with lifespan — width directly shows duration
+    const panelSize = 1.0 + (dur / 22) * 3.0; // 1.0–4.0
+    const panelH = panelSize * 1.35;
+    const geo  = new THREE.PlaneGeometry(panelSize, panelH);
+    const mesh = new THREE.Mesh(geo, mat);
+
+    // Stack vertically within lane to avoid overlap (increment offset)
+    const yPos = Math.max(-2.2, Math.min(2.2, (laneNextY[lane]++ / 4) * 2.0 - 1.5));
+    const zJitter = (Math.random() - 0.5) * 0.3;
+    mesh.position.set(posX, yPos, posZ + zJitter);
+    mesh.rotation.z = (Math.random() - 0.5) * 0.06;
     scene.add(mesh);
 
-    slabs.push({ mesh, data: meme, startX: centerX - width / 2, endX: centerX + width / 2 });
-  });
+    // ── Duration trail: meme-coloured thread from birth to death ──
+    const startZ = (meme.bornYear - CURRENT_YEAR) * K_Z;
+    const endZ   = startZ + lenZ;
+    const trailCurve = new THREE.LineCurve3(
+      new THREE.Vector3(posX, yPos, startZ),
+      new THREE.Vector3(posX, yPos, endZ)
+    );
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: meme.color,
+      transparent: true,
+      opacity: 0.2,
+    });
+    const trail = new THREE.Mesh(
+      new THREE.TubeGeometry(trailCurve, 1, 0.015, 6, false),
+      trailMat
+    );
+    scene.add(trail);
 
-  // Pull camera back so all rows are visible
-  const camZ = FRONT_Z + 30 + numRows * ROW_DEPTH * 0.5;
-  const camY = 10 + numRows * 1.5;
-  camLookAtZ = FRONT_Z - (numRows - 1) * ROW_DEPTH * 0.5;
-  camera.position.set(yearToX(CURRENT_YEAR), camY, camZ);
-  camera.lookAt(yearToX(CURRENT_YEAR), 0, camLookAtZ);
-  // Update initial state.targetX to point to present (rightmost X)
-  state.targetX = yearToX(CURRENT_YEAR);
-  state.currentX = yearToX(CURRENT_YEAR);
+    // ── End marker: tiny dot at death year ──
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: meme.color,
+      transparent: true,
+      opacity: 0.3,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.06, 6), dotMat);
+    dot.position.set(posX, yPos, endZ);
+    scene.add(dot);
 
-
-  // ── Particles ──
-  const pGeo = new THREE.BufferGeometry();
-  const pPos = new Float32Array(PARTICLE_COUNT * 3);
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    pPos[i * 3 + 0] = (Math.random() - 0.5) * 340;
-    pPos[i * 3 + 1] =  Math.random() * 20;
-    pPos[i * 3 + 2] = (Math.random() - 0.5) * 60;
+    floatingPanels.push({
+      mesh, data: meme,
+      startZ,
+      endZ,
+      posX, yPos,
+      baseMat: mat,
+    });
   }
-  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-  particles = new THREE.Points(pGeo, new THREE.PointsMaterial({
-    color: '#88aaff', size: 0.08, transparent: true, opacity: 0.4, sizeAttenuation: true,
+
+  // ── Particles: dust / sediment in the void ──
+  const pg = new THREE.BufferGeometry();
+  const pp = new Float32Array(PARTICLE_COUNT * 3);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    pp[i*3]   = (Math.random() - 0.5) * 30;
+    pp[i*3+1] = (Math.random() - 0.5) * 15;
+    pp[i*3+2] = Math.random() * -300 + 15;
+  }
+  pg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+  particles = new THREE.Points(pg, new THREE.PointsMaterial({
+    color: '#c4b09a',
+    size: 0.035,
+    transparent: true,
+    opacity: 0.2,
+    sizeAttenuation: true,
   }));
   scene.add(particles);
 
-  // ── Post-processing ──
-  composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-
-  bokehPass = new BokehPass(scene, camera, {
-    focus:    26.0,   // roughly the distance from camera to slab fronts
-    aperture: 0.0006, // very narrow, large depth of field → everything readable
-    maxblur:  0.003,
-    width:    innerWidth,
-    height:   innerHeight,
-  });
-  composer.addPass(bokehPass);
-
-  // ── Timeline ──
-  buildTimeline();
-
-  // ── Resize ──
   window.addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
-    composer.setSize(innerWidth, innerHeight);
   });
 }
 
-// Helper: year → scene X coordinate
-function yearToX(year) {
-  return (year - CURRENT_YEAR) * K_X;
-}
-
 // ─────────────────────────────────────────────
-//  TIMELINE RULER (horizontal, bottom of screen)
+//  TIMELINE RULER
 // ─────────────────────────────────────────────
 function buildTimeline() {
-  const PX_PER_YEAR = 64;
+  const PX = 56;
   for (let y = START_YEAR; y <= CURRENT_YEAR; y++) {
-    const offset = (y - START_YEAR) * PX_PER_YEAR;
-    const major  = (y % 5 === 0) || y === CURRENT_YEAR;
-
+    const off = (y - START_YEAR) * PX;
+    const major = y % 5 === 0 || y === CURRENT_YEAR;
     const tick = document.createElement('div');
     tick.className = 'timeline-tick' + (major ? ' major' : '');
-    tick.style.left = offset + 'px';
+    tick.style.left = off + 'px';
     timelineRuler.appendChild(tick);
-
     if (major) {
-      const label = document.createElement('div');
-      label.className    = 'timeline-year-text';
-      label.id           = `tick-year-${y}`;
-      label.textContent  = y;
-      label.style.left   = offset + 'px';
-      timelineRuler.appendChild(label);
+      const lbl = document.createElement('div');
+      lbl.className = 'timeline-year-text';
+      lbl.id = `tick-year-${y}`;
+      lbl.textContent = y;
+      lbl.style.left = off + 'px';
+      timelineRuler.appendChild(lbl);
     }
   }
 }
 
 // ─────────────────────────────────────────────
-//  CONTROLS  (scroll / drag / keyboard / serial)
+//  CONTROLS
 // ─────────────────────────────────────────────
-const PX_PER_YEAR = 64; // Must match buildTimeline
-
-let isDragging = false, lastMouseX = 0;
+let isDragging = false, lastY = 0;
 
 window.addEventListener('wheel', e => {
-  state.targetX += e.deltaY * 0.05;   // scroll up = travel to past (negative X)
-  clamp();
-});
-
-window.addEventListener('mousedown', e => { isDragging = true; lastMouseX = e.clientX; });
-window.addEventListener('mousemove', e => {
-  if (!isDragging) return;
-  state.targetX -= (e.clientX - lastMouseX) * 0.06;
-  lastMouseX = e.clientX;
-  clamp();
-});
-window.addEventListener('mouseup', () => { isDragging = false; });
-
-window.addEventListener('keydown', e => {
-  const step = K_X;
-  if (e.key === 'ArrowLeft')  state.targetX -= step;
-  if (e.key === 'ArrowRight') state.targetX += step;
-  clamp();
-});
-
-// Touch support
-let lastTouchX = 0;
-window.addEventListener('touchstart', e => { lastTouchX = e.touches[0].clientX; });
-window.addEventListener('touchmove',  e => {
-  state.targetX -= (e.touches[0].clientX - lastTouchX) * 0.06;
-  lastTouchX = e.touches[0].clientX;
-  clamp();
+  state.targetZ -= e.deltaY * 0.1;
+  clampZ();
 }, { passive: true });
 
-function clamp() {
-  const minX = yearToX(START_YEAR);
-  const maxX = yearToX(CURRENT_YEAR);
-  state.targetX = Math.max(minX - K_X, Math.min(maxX + K_X, state.targetX));
+window.addEventListener('mousedown', e => { isDragging = true; lastY = e.clientY; });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  state.targetZ += (e.clientY - lastY) * 0.15;
+  lastY = e.clientY;
+  clampZ();
+});
+window.addEventListener('mouseup', () => isDragging = false);
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' || e.key === 'ArrowRight')   state.targetZ -= K_Z;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') state.targetZ += K_Z;
+  clampZ();
+});
+
+let lastTouchY = 0;
+window.addEventListener('touchstart', e => { lastTouchY = e.touches[0].clientY; });
+window.addEventListener('touchmove', e => {
+  state.targetZ += (e.touches[0].clientY - lastTouchY) * 0.12;
+  lastTouchY = e.touches[0].clientY;
+  clampZ();
+}, { passive: true });
+
+function clampZ() {
+  state.targetZ = Math.max(state.timeRange.min - 5, Math.min(state.timeRange.max + 5, state.targetZ));
 }
 
 // ─────────────────────────────────────────────
@@ -488,7 +438,8 @@ function clamp() {
 // ─────────────────────────────────────────────
 async function initSerial() {
   if (!('serial' in navigator)) {
-    serialStatus.textContent = 'UNSUPPORTED'; return;
+    serialStatus.textContent = 'UNSUPPORTED';
+    return;
   }
   try {
     const port = await navigator.serial.requestPort();
@@ -496,8 +447,7 @@ async function initSerial() {
     state.isSerialConnected = true;
     serialDot.classList.add('active');
     serialStatus.textContent = 'CONNECTED';
-
-    const dec    = new TextDecoderStream();
+    const dec = new TextDecoderStream();
     port.readable.pipeTo(dec.writable);
     const reader = dec.readable.getReader();
     let buf = '';
@@ -505,132 +455,158 @@ async function initSerial() {
       const { value, done } = await reader.read();
       if (done) break;
       buf += value;
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for (const line of lines) {
-        const v = parseFloat(line.trim());
-        if (!isNaN(v)) { state.targetX += v * (K_X / 4); clamp(); }
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const l of lines) {
+        const v = parseFloat(l.trim());
+        if (!isNaN(v)) { state.targetZ -= v * 2.5; clampZ(); }
       }
     }
-  } catch (e) {
-    console.warn('Serial failed:', e);
-  }
+  } catch(e) { console.warn('Serial:', e); }
 }
 
 // ─────────────────────────────────────────────
-//  WEB AUDIO  (ambient museum drone)
+//  AUDIO
 // ─────────────────────────────────────────────
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
   droneOsc = audioCtx.createOscillator(); droneOsc.type = 'triangle'; droneOsc.frequency.value = 55;
-  subOsc   = audioCtx.createOscillator(); subOsc.type   = 'sine';     subOsc.frequency.value   = 27.5;
-
-  filterNode = audioCtx.createBiquadFilter();
-  filterNode.type = 'lowpass'; filterNode.frequency.value = 110; filterNode.Q.value = 3.5;
-
+  subOsc   = audioCtx.createOscillator(); subOsc.type = 'sine'; subOsc.frequency.value = 27.5;
+  filterNode = audioCtx.createBiquadFilter(); filterNode.type = 'lowpass'; filterNode.frequency.value = 100; filterNode.Q.value = 3;
   gainNode = audioCtx.createGain(); gainNode.gain.value = 0.0001;
-
   droneOsc.connect(filterNode); subOsc.connect(filterNode);
   filterNode.connect(gainNode); gainNode.connect(audioCtx.destination);
-
   droneOsc.start(); subOsc.start();
-  gainNode.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 4);
+  gainNode.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 5);
 }
 
-function updateAudio(t) {
+function updateAudio() {
   if (!audioCtx) return;
-  // Pitch dips in the "past" (negative X) — older eras feel heavier
-  const depth = Math.max(0, Math.min(1, -state.currentX / (TOTAL_YEARS * K_X)));
-  const speed = Math.abs(state.targetX - state.currentX);
-  droneOsc.frequency.setTargetAtTime(55 - depth * 18 + speed * 0.4, audioCtx.currentTime, 0.1);
-  filterNode.frequency.setTargetAtTime(110 + speed * 12 + depth * 40, audioCtx.currentTime, 0.15);
-}
-
-// ─────────────────────────────────────────────
-//  HUD HELPERS
-// ─────────────────────────────────────────────
-function xToYear(x) {
-  return Math.round(CURRENT_YEAR + x / K_X);
+  const depth = Math.max(0, Math.min(1, -state.currentZ / (TOTAL_YEARS * K_Z)));
+  const speed = Math.abs(state.targetZ - state.currentZ);
+  droneOsc.frequency.setTargetAtTime(55 - depth * 20 + speed * 0.3, audioCtx.currentTime, 0.1);
+  filterNode.frequency.setTargetAtTime(100 + speed * 10 + depth * 40, audioCtx.currentTime, 0.15);
 }
 
 // ─────────────────────────────────────────────
 //  STARTUP
 // ─────────────────────────────────────────────
-connectBtn.addEventListener('click', async () => {
+function startExperience() {
   overlay.classList.add('hidden');
   hud.classList.remove('hidden');
+  memeInfo.classList.remove('hidden');
+  serialIndicator.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
   initAudio();
+}
+
+connectBtn.addEventListener('click', () => startExperience());
+serialBtn.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  startExperience();
   await initSerial();
 });
 
 // ─────────────────────────────────────────────
-//  ANIMATION LOOP
+//  ANIMATE
 // ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
 
-  // Lerp camera X
-  state.currentX = THREE.MathUtils.lerp(state.currentX, state.targetX, 0.06);
+  // Smooth interpolation
+  state.currentZ = THREE.MathUtils.lerp(state.currentZ, state.targetZ, 0.06);
 
-  // Camera tracks along X, maintaining elevated angle
-  camera.position.x = state.currentX;
-  camera.lookAt(state.currentX, 0, camLookAtZ);
+  // Camera follows Z (time travel) — subtle sway
+  const t = performance.now() * 0.001;
+  camera.position.set(
+    Math.sin(t * 0.15) * 0.8,
+    Math.cos(t * 0.12) * 0.4,
+    state.currentZ + 10
+  );
+  camera.lookAt(0, 0, state.currentZ);
 
+  // ── Year display ──
+  const year = Math.round(CURRENT_YEAR + state.currentZ / K_Z);
+  const cYear = Math.max(START_YEAR, Math.min(CURRENT_YEAR, year));
+  currentYearEl.textContent = cYear;
+  eraLabel.textContent = getEraLabel(cYear);
 
-  // Bokeh focus: camera is at z=20, slabs are at z≈-10 → distance ≈30
-  // Adjust focus to distance to active slab (keep current for now)
-  bokehPass.uniforms['focus'].value = 26.0;
-
-  // HUD: current year
-  const year = Math.max(START_YEAR, Math.min(CURRENT_YEAR, xToYear(state.currentX)));
-  currentYearEl.textContent = year;
-
-  // ── Timeline ruler scroll ──
-  const PX = 64;
-  const offset = -((year - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
-  timelineRuler.style.transform = `translateX(${offset}px)`;
+  // ── Timeline ruler ──
+  const PX = 56;
+  const rulerOff = -((cYear - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
+  timelineRuler.style.transform = `translateX(${rulerOff}px)`;
   document.querySelectorAll('.timeline-year-text').forEach(el => {
-    el.classList.toggle('active', el.id === `tick-year-${year}`);
+    el.classList.toggle('active', el.id === `tick-year-${cYear}`);
   });
 
-  // ── Active slab detection ──
-  let activeSlab = null;
-  for (const s of slabs) {
-    if (state.currentX >= s.startX && state.currentX <= s.endX) {
-      activeSlab = s; break;
+  // ── Find active meme (closest panels at current Z) ──
+  let closest = null, closestDist = Infinity;
+  for (const p of floatingPanels) {
+    if (state.currentZ >= p.startZ && state.currentZ <= p.endZ) {
+      const d = Math.abs(state.currentZ - (p.startZ + p.endZ) / 2);
+      if (d < closestDist) { closestDist = d; closest = p; }
     }
   }
 
-  if (activeSlab) {
-    const dur = activeSlab.data.diedYear - activeSlab.data.bornYear || 1;
-    if (state.activeMeme !== activeSlab.data) {
-      state.activeMeme = activeSlab.data;
-      activeMemeEl.textContent     = activeSlab.data.name;
-      activeDurationEl.textContent = `${dur} YEAR${dur > 1 ? 'S' : ''}`;
+  // ── Highlight active panel, dim others ──
+  for (const p of floatingPanels) {
+    const inRange = state.currentZ >= p.startZ && state.currentZ <= p.endZ;
+    const isActive = closest && p === closest;
+    p.baseMat.opacity = THREE.MathUtils.lerp(
+      p.baseMat.opacity,
+      isActive ? 1.0 : (inRange ? 0.8 : 0.15),
+      0.06
+    );
+  }
+
+  // ── Meme fullscreen background (cross-fade between two layers) ──
+  if (closest && closest.data.imageUrl) {
+    if (state.activeMeme !== closest.data) {
+      const cur = bgActiveIsFirst ? memeBgEl2 : memeBgEl;
+      const next = bgActiveIsFirst ? memeBgEl : memeBgEl2;
+      cur.classList.remove('active');
+      next.style.backgroundImage = `url(${closest.data.imageUrl})`;
+      // force reflow so the browser registers the new image
+      void next.offsetWidth;
+      next.classList.add('active');
+      bgActiveIsFirst = !bgActiveIsFirst;
     }
   } else {
-    activeMemeEl.textContent     = '— —';
-    activeDurationEl.textContent = '';
-    state.activeMeme = null;
+    memeBgEl.classList.remove('active');
+    memeBgEl2.classList.remove('active');
+  }
+
+  // ── Update active meme display ──
+  if (closest) {
+    if (state.activeMeme !== closest.data) {
+      state.activeMeme = closest.data;
+      activeMemeEl.textContent = closest.data.name;
+      const dur = closest.data.diedYear - closest.data.bornYear || 1;
+      activeDurEl.textContent = `${closest.data.bornYear} — ${closest.data.diedYear}  ·  ${dur} YEAR${dur > 1 ? 'S' : ''}`;
+    }
+  } else {
+    if (state.activeMeme !== null) {
+      state.activeMeme = null;
+      activeMemeEl.textContent = '';
+      activeDurEl.textContent = '';
+    }
   }
 
   // ── Particles drift ──
   if (particles) {
     const arr = particles.geometry.attributes.position.array;
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      arr[i * 3 + 1] -= 0.01;
-      if (arr[i * 3 + 1] < -2) arr[i * 3 + 1] = 18;
+      arr[i*3+1] -= 0.005 + Math.sin(i + t * 0.3) * 0.002;
+      if (arr[i*3+1] < -8) arr[i*3+1] = 8;
     }
     particles.geometry.attributes.position.needsUpdate = true;
   }
 
   updateAudio();
-  composer.render();
+  renderer.render(scene, camera);
 }
 
 // ── Init ──
 initThree();
+buildTimeline();
 animate();

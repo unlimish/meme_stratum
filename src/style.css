@@ -1,10 +1,19 @@
+/* ─────────────────────────────────────────────
+   MEME STRATUM — Kinetic Typography Art Piece
+   Cosmos.so / kemmotar–inspired editorial design
+   ───────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'SystemFallback';
+  src: local('Inter'), local('Helvetica Neue'), local('Arial');
+}
+
 :root {
-  --bg-color: #050505;
-  --text-color: #f5f5f5;
-  --accent-color: #ff3366;
-  --panel-bg: rgba(10, 10, 10, 0.65);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --glow-color: rgba(255, 51, 102, 0.4);
+  --bg: #c4b8a5;
+  --fg: #1a1410;
+  --fg-dim: rgba(26, 20, 16, 0.45);
+  --fg-faint: rgba(26, 20, 16, 0.12);
+  --accent: #2a2018;
 }
 
 * {
@@ -12,44 +21,57 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 body, html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-color);
-  font-family: 'Outfit', sans-serif;
-  color: var(--text-color);
+  background: var(--bg);
+  font-family: 'Inter', 'Outfit', -apple-system, sans-serif;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Fullscreen Canvas */
+/* ── Meme Fullscreen Background (dual-layer cross-fade) ── */
+#meme-bg-1, #meme-bg-2 {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 1s ease;
+  filter: blur(16px) saturate(0.5);
+  transform: scale(1.08);
+}
+#meme-bg-1.active, #meme-bg-2.active {
+  opacity: 0.3;
+}
+
+/* ── Canvas ── */
 #webgl {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: fixed;
+  inset: 0;
   width: 100%;
   height: 100%;
   z-index: 1;
-  outline: none;
 }
 
-/* Overlay Screen */
+/* ── Overlay ── */
 #overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 10;
-  background: radial-gradient(circle at center, rgba(10,10,10,0.85) 0%, rgba(5,5,5,0.98) 100%);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
-  justify-content: center;
   align-items: center;
-  transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1), visibility 0.8s;
-  backdrop-filter: blur(10px);
+  justify-content: center;
+  background: var(--bg);
+  transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 1.2s;
 }
-
 #overlay.hidden {
   opacity: 0;
   visibility: hidden;
@@ -58,266 +80,251 @@ body, html {
 
 .overlay-content {
   text-align: center;
-  max-width: 500px;
-  padding: 40px;
-  border-radius: 24px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 0;
 }
 
-h1 {
-  font-size: 3rem;
-  font-weight: 200;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-bottom: 0.2rem;
-  background: linear-gradient(135deg, #fff 30%, #a5a5a5 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.overlay-title {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 100;
+  font-size: clamp(4rem, 12vw, 10rem);
+  line-height: 0.92;
+  letter-spacing: 0.06em;
+  color: var(--fg);
+  margin-bottom: 1.2rem;
 }
 
-.subtitle {
-  font-size: 1rem;
-  font-weight: 400;
-  letter-spacing: 0.5em;
-  color: var(--accent-color);
-  text-transform: uppercase;
-  margin-bottom: 2.5rem;
-  text-shadow: 0 0 10px var(--glow-color);
+.overlay-sub {
+  font-size: clamp(0.9rem, 2vw, 1.4rem);
+  font-weight: 300;
+  letter-spacing: 0.8em;
+  color: var(--fg-dim);
+  margin-bottom: 3rem;
 }
 
-.instruction {
-  margin-bottom: 2.5rem;
-  line-height: 1.6;
+.overlay-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 3rem;
 }
-
-.instruction p {
-  font-size: 0.9rem;
-  color: #888;
-  font-weight: 200;
-  letter-spacing: 0.05em;
+.overlay-desc span {
+  font-size: 0.85rem;
+  font-weight: 300;
+  color: var(--fg-dim);
+  letter-spacing: 0.04em;
 }
-
-.instruction .japanese {
-  font-size: 0.8rem;
-  margin-top: 5px;
-  opacity: 0.7;
+.overlay-desc .jp {
+  font-size: 0.75rem;
+  color: var(--fg-faint);
 }
 
 #connect-btn {
-  background: linear-gradient(135deg, var(--accent-color) 0%, #cc0033 100%);
-  border: none;
-  padding: 16px 36px;
-  color: white;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.15em;
-  border-radius: 40px;
+  background: transparent;
+  border: 1px solid var(--fg-dim);
+  padding: 14px 48px;
+  color: var(--fg);
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.25em;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(255, 51, 102, 0.3);
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
 #connect-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 15px 35px rgba(255, 51, 102, 0.5);
-  background: linear-gradient(135deg, #ff5580 0%, var(--accent-color) 100%);
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
 }
 
-#connect-btn:active {
-  transform: translateY(1px);
-}
-
-.fallback-note {
+.overlay-serial {
   margin-top: 1.5rem;
-  font-size: 0.75rem;
-  color: #555;
-  font-weight: 200;
+}
+.serial-link {
+  background: none;
+  border: none;
+  color: var(--fg-faint);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+.serial-link:hover {
+  color: var(--fg-dim);
 }
 
-/* Minimal HUD Overlay */
+/* ── HUD: Giant Year ── */
 #hud {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 5;
-  pointer-events: none; /* Let clicks pass through to canvas */
-  display: flex;
-  justify-content: space-between;
-  padding: 40px;
-  opacity: 1;
-  transition: opacity 0.5s ease;
-}
-
-#hud.hidden {
-  opacity: 0;
-}
-
-.hud-left, .hud-right {
-  display: flex;
-  flex-direction: column;
-}
-
-.hud-right {
-  align-items: flex-end;
-  justify-content: space-between;
-}
-
-.year-label, .meme-title-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 5px;
-  text-transform: uppercase;
-}
-
-.year-value {
-  font-size: 4rem;
-  font-weight: 200;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: #fff;
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
-}
-
-.status-indicator {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   display: flex;
   align-items: center;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.7);
+  justify-content: center;
+  flex-direction: column;
+  transition: opacity 0.8s;
+}
+#hud.hidden { opacity: 0; }
+
+.hud-year {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 100;
+  font-size: clamp(6rem, 22vw, 18rem);
+  line-height: 0.85;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  opacity: 0.12;
+  transition: opacity 0.3s;
 }
 
-.pulse-dot {
-  width: 6px;
-  height: 6px;
-  background-color: #555;
-  border-radius: 50%;
-  margin-right: 8px;
-  display: inline-block;
-  transition: background-color 0.3s ease;
-}
-
-.pulse-dot.active {
-  background-color: #00ff66;
-  box-shadow: 0 0 8px #00ff66;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-.meme-title-container {
-  text-align: right;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  padding: 15px 25px;
-  border-radius: 16px;
-  backdrop-filter: blur(5px);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-}
-
-.meme-title-value {
-  font-size: 1.25rem;
-  font-weight: 400;
-  letter-spacing: 0.05em;
-  color: #fff;
-  margin-top: 2px;
-}
-
-.meme-duration-value {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--accent-color);
-  letter-spacing: 0.1em;
-  margin-top: 4px;
+.hud-era {
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  font-size: clamp(0.7rem, 1.4vw, 1rem);
+  letter-spacing: 0.4em;
+  color: var(--fg-dim);
+  margin-top: 0.8rem;
   text-transform: uppercase;
+  min-height: 1.2em;
 }
 
-/* Sliding Timeline Ruler */
-#timeline-wrapper {
-  position: absolute;
-  top: 40px;
+/* ── Active Meme Info ── */
+#meme-info {
+  position: fixed;
+  bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
-  width: 60%;
-  height: 60px;
-  z-index: 5;
+  z-index: 20;
   pointer-events: none;
-  overflow: hidden;
-  transition: opacity 0.8s ease;
-  mask-image: linear-gradient(to right, transparent, white 20%, white 80%, transparent);
-  -webkit-mask-image: linear-gradient(to right, transparent, white 20%, white 80%, transparent);
+  transition: opacity 0.5s;
+}
+#meme-info.hidden { opacity: 0; }
+
+.meme-info-inner {
+  text-align: center;
 }
 
-#timeline-wrapper.hidden {
-  opacity: 0;
+.meme-info-name {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.2rem, 3vw, 2.4rem);
+  letter-spacing: 0.08em;
+  color: var(--fg);
+  text-transform: uppercase;
+  text-shadow: 0 0 30px rgba(26, 20, 16, 0.2);
+  white-space: nowrap;
 }
+
+.meme-info-years {
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  font-size: 0.8rem;
+  letter-spacing: 0.3em;
+  color: var(--fg-dim);
+  margin-top: 0.4rem;
+}
+
+/* ── Serial Indicator ── */
+#serial-indicator {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  color: var(--fg-dim);
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+#serial-indicator.hidden { opacity: 0; }
+
+.pulse-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--fg-faint);
+  border-radius: 50%;
+  display: inline-block;
+  transition: background 0.3s;
+}
+.pulse-dot.active {
+  background: #8f8;
+  box-shadow: 0 0 6px #8f8;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Timeline ── */
+#timeline-wrapper {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  max-width: 700px;
+  height: 40px;
+  z-index: 20;
+  pointer-events: none;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, white 15%, white 85%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, white 15%, white 85%, transparent);
+  transition: opacity 0.8s;
+}
+#timeline-wrapper.hidden { opacity: 0; }
 
 #timeline-pointer {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 2px;
-  height: 15px;
-  background-color: var(--accent-color);
+  width: 1px;
+  height: 16px;
+  background: var(--fg);
   z-index: 6;
-  box-shadow: 0 0 8px var(--accent-color);
 }
 
 #timeline-ruler {
   position: absolute;
   top: 0;
-  left: 50%; /* Center is current time */
+  left: 50%;
   height: 100%;
-  display: flex;
-  align-items: flex-start;
-  transition: transform 0.1s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: transform 0.15s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: transform;
 }
 
 .timeline-tick {
   position: absolute;
   width: 1px;
-  height: 8px;
-  background-color: rgba(255, 255, 255, 0.25);
+  height: 6px;
+  background: var(--fg-faint);
 }
-
 .timeline-tick.major {
-  height: 15px;
-  background-color: rgba(255, 255, 255, 0.6);
+  height: 14px;
+  background: var(--fg-dim);
 }
 
 .timeline-year-text {
   position: absolute;
-  top: 22px;
+  top: 20px;
   transform: translateX(-50%);
-  font-size: 0.75rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.6rem;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.5);
-  font-family: monospace;
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  transition: color 0.2s;
 }
-
 .timeline-year-text.active {
-  color: var(--accent-color);
-  font-weight: 700;
+  color: var(--fg);
 }
-
-
