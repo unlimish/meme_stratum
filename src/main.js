@@ -31,7 +31,7 @@ const state = {
 // ── Idle / auto-scroll ──
 let idleTimer = null;
 const IDLE_DELAY = 20000;
-const AUTO_SCROLL_SPEED = 3.5;
+const AUTO_SCROLL_SPEED = 1.5;
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   state.autoScrolling = false;
