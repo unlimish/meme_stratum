@@ -37,7 +37,7 @@ const eraLabel       = document.getElementById('era-label');
 const memeInfo       = document.getElementById('meme-info');
 const activeMemeEl   = document.getElementById('active-meme');
 const activeDurEl    = document.getElementById('active-duration');
-const memeBgEl       = document.getElementById('meme-bg');
+const memeBgEl       = document.getElementById('meme-bg-1');
 const memeBgEl2      = document.getElementById('meme-bg-2');
 let bgActiveIsFirst  = true;
 const serialDot      = document.getElementById('serial-dot');
@@ -296,8 +296,8 @@ function initThree() {
       depthWrite: false,
     });
 
-    // Panel size scales with lifespan — width directly shows duration
-    const panelSize = 1.0 + (dur / 22) * 3.0; // 1.0–4.0
+    // Panel size scales with lifespan — long-lived memes get huge
+    const panelSize = 1.0 + (dur / 22) * 5.0; // 1.0–6.0
     const panelH = panelSize * 1.35;
     const geo  = new THREE.PlaneGeometry(panelSize, panelH);
     const mesh = new THREE.Mesh(geo, mat);
