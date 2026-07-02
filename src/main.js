@@ -1008,8 +1008,9 @@ function animate() {
   }
 
   // ── Update active meme display ──
-  // Skip if hovering a contemporary (mouseleave will restore via animate)
-  if (closest && state.hoveredContemporary === null) {
+  if (state.hoveredContemporary) {
+    // Hovering a contemporary: display managed by mouseenter handler, do nothing here
+  } else if (closest) {
     if (state.activeMeme !== closest.data) {
       state.activeMeme = closest.data;
       activeMemeEl.textContent = closest.data.name;
