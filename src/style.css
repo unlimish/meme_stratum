@@ -655,6 +655,63 @@ body, html {
   border-color: rgba(255, 250, 240, 0.6);
 }
 
+/* ── Contemporary Memes (sub-display) ── */
+.contemporary-memes {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(232, 224, 216, 0.08);
+  transition: opacity 0.5s;
+}
+.contemporary-memes.hidden {
+  opacity: 0;
+}
+
+.cm-label {
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  color: rgba(232, 224, 216, 0.3);
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+}
+
+.cm-list {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.cm-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(232, 224, 216, 0.05);
+  border-radius: 3px;
+  border: 1px solid rgba(232, 224, 216, 0.08);
+}
+
+.cm-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cm-name {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: rgba(232, 224, 216, 0.55);
+  letter-spacing: 0.05em;
+}
+
+.cm-years {
+  font-size: 0.55rem;
+  color: rgba(232, 224, 216, 0.3);
+}
+
 /* ── Glitch/Burn Overlay ── */
 #glitch-overlay {
   position: fixed;

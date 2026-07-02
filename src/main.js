@@ -502,52 +502,6 @@ function initThree() {
 
   state.landfillDepth = currentY;
 
-  // ── Mineral veins ──
-  const memeMap = new Map(memeData.map(m => [m.id, m]));
-  for (const meme of memeData) {
-    if (!meme.influencedBy || meme.influencedBy.length === 0) continue;
-    for (const parentId of meme.influencedBy) {
-      const parent = memeMap.get(parentId);
-      if (!parent) continue;
-      const parentStrata = strataMeshes.find(s => s.year >= parent.bornYear && s.year <= parent.diedYear);
-      const childStrata = strataMeshes.find(s => s.year >= meme.bornYear && s.year <= meme.diedYear);
-      if (!parentStrata || !childStrata) continue;
-
-      const startY = parentStrata.yStart + (parentStrata.yEnd - parentStrata.yStart) * 0.5;
-      const endY = childStrata.yStart + (childStrata.yEnd - childStrata.yStart) * 0.5;
-      const startX = (Math.random() - 0.5) * 4;
-      const endX = (Math.random() - 0.5) * 4;
-      const midY = (startY + endY) / 2;
-      const midX = (startX + endX) / 2 + (Math.random() - 0.5) * 3;
-      const midZ = -STRATA_Z_OFFSET + (Math.random() - 0.5) * 2;
-
-      const curve = new THREE.QuadraticBezierCurve3(
-        new THREE.Vector3(startX, startY, midZ + 1),
-        new THREE.Vector3(midX, midY, midZ - 1),
-        new THREE.Vector3(endX, endY, midZ + 0.5)
-      );
-
-      // Desaturate parent color for subtle vein
-      const pC = new THREE.Color(parent.color);
-      const gray = pC.r * 0.3 + pC.g * 0.59 + pC.b * 0.11;
-      const veinColor = new THREE.Color().setRGB(
-        pC.r * 0.3 + gray * 0.7,
-        pC.g * 0.3 + gray * 0.7,
-        pC.b * 0.3 + gray * 0.7
-      );
-      const tubeGeo = new THREE.TubeGeometry(curve, 24, 0.015, 6, false);
-      const tubeMat = new THREE.MeshBasicMaterial({
-        color: veinColor,
-        transparent: true,
-        opacity: 0.12,
-        side: THREE.DoubleSide,
-      });
-      const tube = new THREE.Mesh(tubeGeo, tubeMat);
-      scene.add(tube);
-      veinMeshes.push({ mesh: tube, parentColor: parent.color });
-    }
-  }
-
   // ── Factory smoke at the top (Algorithmic Age) ──
   const smokeGeo = new THREE.BufferGeometry();
   const smokePos = new Float32Array(200 * 3);
@@ -1063,6 +1017,34 @@ function animate() {
         activeDescEl.textContent = closest.data.description;
         activeDescEl.classList.add('visible');
       }
+
+      // ── Contemporaries: other memes from same era ──
+      const cmList = document.getElementById('cm-list');
+      if (cmList) {
+        cmList.innerHTML = '';
+        const activeBorn = closest.data.bornYear;
+        // Find memes born within ±3 years, excluding current
+        const contemporaries = memeData
+          .filter(m => m.id !== closest.data.id && Math.abs(m.bornYear - activeBorn) <= 3)
+          .sort((a, b) => a.bornYear - b.bornYear)
+          .slice(0, 5);
+        const cmContainer = document.getElementById('contemporary-memes');
+        if (contemporaries.length > 0) {
+          cmContainer.classList.remove('hidden');
+          for (const cm of contemporaries) {
+            const item = document.createElement('div');
+            item.className = 'cm-item';
+            item.innerHTML = `
+              <div class="cm-dot" style="background:${cm.color}"></div>
+              <span class="cm-name">${cm.name}</span>
+              <span class="cm-years">${cm.bornYear}</span>
+            `;
+            cmList.appendChild(item);
+          }
+        } else if (cmContainer) {
+          cmContainer.classList.add('hidden');
+        }
+      }
     }
   } else {
     if (state.activeMeme !== null) {
@@ -1071,6 +1053,8 @@ function animate() {
       activeDurEl.textContent = '';
       activeSalvageEl.classList.remove('visible');
       activeDescEl.classList.remove('visible');
+      const cmContainer = document.getElementById('contemporary-memes');
+      if (cmContainer) cmContainer.classList.add('hidden');
     }
   }
 
