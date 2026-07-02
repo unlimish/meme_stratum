@@ -321,7 +321,7 @@ body, html {
   letter-spacing: 0.08em;
   color: var(--fg);
   text-transform: uppercase;
-  text-shadow: 0 0 30px rgba(26, 20, 16, 0.2);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
 }
 
@@ -330,7 +330,8 @@ body, html {
   font-weight: 300;
   font-size: 0.8rem;
   letter-spacing: 0.3em;
-  color: var(--fg-dim);
+  color: rgba(232, 224, 216, 0.8);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
   margin-top: 0.4rem;
 }
 
@@ -340,6 +341,7 @@ body, html {
   font-size: 0.7rem;
   letter-spacing: 0.15em;
   color: var(--salvage);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
   margin-top: 0.5rem;
   opacity: 0;
   transition: opacity 0.5s;
@@ -351,9 +353,10 @@ body, html {
 .meme-info-desc {
   font-family: 'Inter', sans-serif;
   font-weight: 300;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   line-height: 1.6;
-  color: var(--fg-dim);
+  color: rgba(232, 224, 216, 0.85);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
   margin-top: 0.8rem;
   max-width: 500px;
   margin-left: auto;
