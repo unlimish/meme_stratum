@@ -682,6 +682,15 @@ body, html {
   flex-wrap: wrap;
 }
 
+.cm-list:hover .cm-item {
+  opacity: 0.25;
+  transition: opacity 0.25s ease;
+}
+
+.cm-list:hover .cm-item:hover {
+  opacity: 1.0;
+}
+
 .cm-item {
   display: flex;
   align-items: center;
@@ -690,6 +699,8 @@ body, html {
   background: rgba(232, 224, 216, 0.05);
   border-radius: 3px;
   border: 1px solid rgba(232, 224, 216, 0.08);
+  cursor: default;
+  transition: opacity 0.25s ease;
 }
 
 .cm-dot {
