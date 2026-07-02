@@ -434,10 +434,9 @@ function initThree() {
     for (let i = 0; i < memes.length; i++) {
       const meme = memes[i];
       const dur = Math.max(1, meme.diedYear - meme.bornYear);
-      const xPos = (i - (memes.length - 1) / 2) * 2.2;
-      const yPos = currentY + (layerThickness * 0.25) + (Math.random() * layerThickness * 0.5);
-      // Spread memes along Z so they never fully overlap vertically
-      const zPos = -STRATA_Z_OFFSET + ((i / Math.max(1, memes.length)) - 0.5) * (LAYER_Z * 0.7) + (Math.random() - 0.5) * 0.5;
+      const xPos = (i - (memes.length - 1) / 2) * 2.5;
+      const yPos = currentY + (layerThickness * 0.3) + (Math.random() * layerThickness * 0.4);
+      const zPos = -STRATA_Z_OFFSET + (Math.random() - 0.5) * (LAYER_Z * 0.6);
 
       const tex = createFossilTexture(meme, ageFactor, state.salvagedMemes.has(meme.id));
       const mat = new THREE.MeshBasicMaterial({
