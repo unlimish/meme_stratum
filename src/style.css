@@ -206,6 +206,9 @@ body.cursor-hidden, body.cursor-hidden * {
   align-items: center;
   justify-content: center;
   flex-direction: column;
+  /* Lift the year/era block above screen centre so the era nickname
+     stays clear of the meme-info stack even on shorter displays */
+  padding-bottom: 18vh;
   transition: opacity 0.8s;
 }
 #hud.hidden { opacity: 0; }
@@ -485,6 +488,13 @@ body.cursor-hidden, body.cursor-hidden * {
   margin-right: auto;
   opacity: 0;
   transition: opacity 0.5s 0.2s;
+  /* Fixed two-line box: swapping descriptions (hover/scroll) must never
+     reflow the contemporaries row below — that caused a hover jitter loop */
+  min-height: calc(0.75rem * 1.6 * 2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .meme-info-desc.visible {
   opacity: 1;
