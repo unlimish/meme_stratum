@@ -1034,10 +1034,22 @@ function animate() {
           for (const cm of contemporaries) {
             const item = document.createElement('div');
             item.className = 'cm-item';
+            item.dataset.memeId = cm.id;
             item.innerHTML = `
               <span class="cm-name">${cm.name}</span>
               <span class="cm-years">${cm.bornYear}</span>
             `;
+            // Hover: spotlight this meme in the strata
+            item.addEventListener('mouseenter', () => {
+              for (const p of memePanels) {
+                p.baseMat.opacity = (p.data.id === cm.id) ? 1.0 : 0.06;
+              }
+            });
+            item.addEventListener('mouseleave', () => {
+              for (const p of memePanels) {
+                p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, 0.75, 0.2);
+              }
+            });
             cmList.appendChild(item);
           }
         } else if (cmContainer) {
