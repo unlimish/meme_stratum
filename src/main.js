@@ -937,7 +937,7 @@ function animate() {
 
   // Find which stratum (year) the camera is currently inside
   const currentStratum = strataMeshes.find(s => state.currentY >= s.yStart && state.currentY <= s.yEnd);
-  const cYear = currentStratum ? currentStratum.year : START_YEAR;
+  const cYear = currentStratum ? currentStratum.year : (state.currentY > state.landfillDepth ? CURRENT_YEAR : START_YEAR);
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
