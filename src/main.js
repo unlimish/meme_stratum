@@ -52,6 +52,7 @@ const state = {
   totalMemesMissed: 0,
   reportShown: false,
   hoveredContemporary: null,
+  lastCY: null,
 };
 
 // ── Idle / auto-scroll ──
@@ -1037,13 +1038,15 @@ function animate() {
         activeDescEl.textContent = closest.data.description;
         activeDescEl.classList.add('visible');
       }
+    }
 
-      // ── Contemporaries: other memes from current era (by year, not by closest meme's birth) ──
+    // ── Contemporaries: always update when cYear changes (even if closest is same meme) ──
+    if (state.lastCY !== cYear && closest) {
+      state.lastCY = cYear;
       const cmList = document.getElementById('cm-list');
       if (cmList) {
         cmList.innerHTML = '';
-        const eraYear = cYear; // current year being viewed
-        // Find memes born within ±3 years of current era, excluding closest
+        const eraYear = cYear;
         const contemporaries = memeData
           .filter(m => m.id !== closest.data.id && Math.abs(m.bornYear - eraYear) <= 3)
           .sort((a, b) => a.bornYear - b.bornYear)
@@ -1059,13 +1062,11 @@ function animate() {
               <span class="cm-name">${cm.name}</span>
               <span class="cm-years">${cm.bornYear}</span>
             `;
-            // Hover: spotlight this meme in the strata + temporarily show its info
             item.addEventListener('mouseenter', () => {
               state.hoveredContemporary = cm;
               for (const p of memePanels) {
                 p.baseMat.userData.hoverTarget = (p.data.id === cm.id) ? 1.0 : 0.06;
               }
-              // Temporarily swap display to hovered contemporary
               activeMemeEl.textContent = cm.name;
               const dur = cm.diedYear - cm.bornYear || 1;
               const typeLabel = { sudden: '⚡', fade: '⋯', resurrected: '↺' }[cm.deathType] || '';
@@ -1083,7 +1084,6 @@ function animate() {
               for (const p of memePanels) {
                 p.baseMat.userData.hoverTarget = null;
               }
-              // Display will be restored by animate() on next frame
             });
             cmList.appendChild(item);
           }
