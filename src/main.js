@@ -430,7 +430,12 @@ function initThree() {
     scene.add(strataMesh);
 
     // ── Cross-section boundary lines (top and bottom edges) ──
-    const edgeColor = new THREE.Color(w.hex);
+    // Use age-based warm tones without referencing internal weatherColor var
+    const edgeColor = new THREE.Color().setHSL(
+      0.08 + ageFactor * 0.02, // warm browns
+      0.25 + densityFactor * 0.1,
+      0.55 - ageFactor * 0.12
+    );
     const edgeMat = new THREE.LineBasicMaterial({
       color: edgeColor,
       transparent: true,
