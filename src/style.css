@@ -9,14 +9,14 @@
 }
 
 :root {
-  --bg: #a89888;
-  --fg: #1a1410;
-  --fg-dim: rgba(26, 20, 16, 0.45);
-  --fg-faint: rgba(26, 20, 16, 0.12);
-  --accent: #2a2018;
+  --bg: #12100d;
+  --fg: #e8e0d8;
+  --fg-dim: rgba(232, 224, 216, 0.45);
+  --fg-faint: rgba(232, 224, 216, 0.12);
+  --accent: #8a8078;
   --warn: #cc4400;
   --danger: #aa1111;
-  --salvage: #228844;
+  --salvage: #33aa66;
   --factory: #334455;
   --landfill: #443322;
 }

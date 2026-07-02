@@ -417,37 +417,9 @@ function initThree() {
 
     const strataGeo = new THREE.BoxGeometry(12, layerThickness, LAYER_Z);
     const strataTex = createStrataTexture(year, memes, ageFactor, densityFactor);
-    // ── Cross-section boundary lines (top and bottom edges) ──
-    // No box faces at all — just thin horizontal wireframe lines
-    const edgeGray = Math.round(120 - ageFactor * 40);
-    const edgeColor = new THREE.Color(`rgb(${edgeGray}, ${edgeGray}, ${edgeGray})`);
-    const edgeMat = new THREE.LineBasicMaterial({
-      color: edgeColor,
-      transparent: true,
-      opacity: 0.35 + ageFactor * 0.15,
-    });
-    // Top edge
-    const topPts = [
-      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
-      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
-      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
-      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
-      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
-    ];
-    const topGeo = new THREE.BufferGeometry().setFromPoints(topPts);
-    const topLine = new THREE.Line(topGeo, edgeMat);
-    scene.add(topLine);
-    // Bottom edge
-    const botPts = [
-      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
-      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
-      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
-      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
-      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
-    ];
-    const botGeo = new THREE.BufferGeometry().setFromPoints(botPts);
-    const botLine = new THREE.Line(botGeo, edgeMat);
-    scene.add(botLine);
+    // ── Year label in 3D space (small floating text near the layer) ──
+    const yearLabelY = currentY + layerThickness / 2;
+    // No horizontal lines — year is indicated by fossils alone
 
     // Push dummy strata record for tracking (no visible mesh)
     strataMeshes.push({
@@ -462,9 +434,10 @@ function initThree() {
     for (let i = 0; i < memes.length; i++) {
       const meme = memes[i];
       const dur = Math.max(1, meme.diedYear - meme.bornYear);
-      const xPos = (i - (memes.length - 1) / 2) * 2.5;
-      const yPos = currentY + (layerThickness * 0.3) + (Math.random() * layerThickness * 0.4);
-      const zPos = -STRATA_Z_OFFSET + (Math.random() - 0.5) * (LAYER_Z * 0.6);
+      const xPos = (i - (memes.length - 1) / 2) * 2.2;
+      const yPos = currentY + (layerThickness * 0.25) + (Math.random() * layerThickness * 0.5);
+      // Spread memes along Z so they never fully overlap vertically
+      const zPos = -STRATA_Z_OFFSET + ((i / Math.max(1, memes.length)) - 0.5) * (LAYER_Z * 0.7) + (Math.random() - 0.5) * 0.5;
 
       const tex = createFossilTexture(meme, ageFactor, state.salvagedMemes.has(meme.id));
       const mat = new THREE.MeshBasicMaterial({
