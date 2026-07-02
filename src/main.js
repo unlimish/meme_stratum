@@ -962,11 +962,16 @@ function animate() {
   for (const p of memePanels) {
     const isActive = closest && p === closest;
     const inRange = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2) < K_Y * 1.5;
-    p.baseMat.opacity = THREE.MathUtils.lerp(
-      p.baseMat.opacity,
-      isActive ? 1.0 : (inRange ? 0.7 : 0.12),
-      0.06
-    );
+    // Contemporaries hover overrides normal opacity
+    if (p.baseMat.userData.hoverTarget !== null && p.baseMat.userData.hoverTarget !== undefined) {
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, p.baseMat.userData.hoverTarget, 0.15);
+    } else {
+      p.baseMat.opacity = THREE.MathUtils.lerp(
+        p.baseMat.opacity,
+        isActive ? 1.0 : (inRange ? 0.7 : 0.12),
+        0.06
+      );
+    }
   }
 
   // ── Vein pulse ──
@@ -1042,12 +1047,12 @@ function animate() {
             // Hover: spotlight this meme in the strata
             item.addEventListener('mouseenter', () => {
               for (const p of memePanels) {
-                p.baseMat.opacity = (p.data.id === cm.id) ? 1.0 : 0.06;
+                p.baseMat.userData.hoverTarget = (p.data.id === cm.id) ? 1.0 : 0.06;
               }
             });
             item.addEventListener('mouseleave', () => {
               for (const p of memePanels) {
-                p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, 0.75, 0.2);
+                p.baseMat.userData.hoverTarget = null;
               }
             });
             cmList.appendChild(item);
