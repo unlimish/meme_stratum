@@ -680,11 +680,12 @@ body, html {
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
+  pointer-events: auto; /* override parent's pointer-events:none */
 }
 
 .cm-list:hover .cm-item {
-  opacity: 0.25;
-  transition: opacity 0.25s ease;
+  opacity: 0.2;
+  transition: opacity 0.2s ease;
 }
 
 .cm-list:hover .cm-item:hover {
@@ -700,7 +701,8 @@ body, html {
   border-radius: 3px;
   border: 1px solid rgba(232, 224, 216, 0.08);
   cursor: default;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease;
+  opacity: 1;
 }
 
 .cm-dot {

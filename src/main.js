@@ -1035,7 +1035,6 @@ function animate() {
             const item = document.createElement('div');
             item.className = 'cm-item';
             item.innerHTML = `
-              <div class="cm-dot" style="background:${cm.color}"></div>
               <span class="cm-name">${cm.name}</span>
               <span class="cm-years">${cm.bornYear}</span>
             `;
