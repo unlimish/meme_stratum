@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Meme Stratum — ミームの地層</title>
+    <!-- Fonts are bundled locally: the piece must survive without network -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <script type="module" crossorigin src="/assets/index-B4tivp57.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-jxW0tj6r.css">
+  </head>
+  <body>
+    <!-- Meme Fullscreen Background (two layers for cross-fade) -->
+    <div id="meme-bg-1"></div>
+    <div id="meme-bg-2"></div>
+
+    <!-- 3D Canvas -->
+    <canvas id="webgl"></canvas>
+
+    <!-- Overlay for Start -->
+    <div id="overlay">
+      <div class="overlay-content">
+        <div class="overlay-title">MEME<br>STRATUM</div>
+        <div class="overlay-sub">ミームの地層</div>
+        <div class="overlay-desc">
+          <span>Scroll to excavate 26 years of internet culture</span>
+          <span class="jp">スクロール／ドラッグ／矢印キーで、26年分のインターネット文化を発掘する</span>
+          <span class="jp">SALVAGE で5体のミームを永久保存 · 選ばなかったミームは風化して忘れ去られる</span>
+          <span class="jp">あなたにはランダムな発掘者IDが与えられ、キュレーションはスコアボードに刻まれる</span>
+          <span class="jp warn">デジタル考古学者として、あなたは53体の中からたった5体を選ぶ</span>
+        </div>
+        <button id="connect-btn">ENTER</button>
+        <div class="overlay-hint">クリック・スクロール・キー操作で開始 / any input to begin</div>
+        <div id="overlay-board" class="hidden">
+          <div class="ob-title">HALL OF DIGGERS</div>
+          <div id="overlay-board-list"></div>
+        </div>
+        <div class="overlay-serial">
+          <button id="serial-btn" class="serial-link">CONNECT ROTARY ENCODER</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Year HUD — giant typographic year -->
+    <div id="hud" class="hidden">
+      <div class="hud-year">
+        <span id="current-year">2026</span>
+      </div>
+      <div class="hud-era" id="era-label"></div>
+      <div class="hud-era-jp" id="era-label-jp"></div>
+    </div>
+
+    <!-- Visitor identity: who is digging + their session score (top-left) -->
+    <div id="metrics-panel" class="hidden">
+      <div class="metric" id="visitor-card">
+        <div class="metric-label">DIGGER ID</div>
+        <div class="metric-value" id="visitor-name">—</div>
+        <div class="visitor-scorerow">
+          <span class="visitor-score"><span id="curation-score">0</span> pts</span>
+          <span class="visitor-rank">RANK <span id="curation-rank">-</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ambient satire meter: consumption velocity (bottom-right, separate concern) -->
+    <div id="ambient-metrics" class="hidden">
+      <div class="metric-label">CONSUMPTION VELOCITY</div>
+      <div class="velocity-row">
+        <span class="metric-value" id="consumption-velocity">0.0</span>
+        <span class="metric-unit">memes/sec</span>
+      </div>
+      <div class="metric-bar"><div class="metric-fill" id="velocity-fill"></div></div>
+      <div class="warning" id="consumption-warning">⚠ CONSUMPTION LIMIT APPROACHING</div>
+    </div>
+
+    <!-- Focus link: leader line tying the focused fossil to its label -->
+    <svg id="focus-link">
+      <line id="focus-line" x1="0" y1="0" x2="0" y2="0" />
+      <circle id="focus-dot" cx="0" cy="0" r="3" />
+    </svg>
+
+    <!-- Active Meme Info + Salvage (flexbox column, never overlap) -->
+    <div id="meme-info" class="hidden">
+      <div class="meme-info-inner">
+        <div class="meme-title-row">
+          <div class="meme-info-name" id="active-meme">— —</div>
+          <div id="salvage-btn" class="hidden">SALVAGE</div>
+        </div>
+        <div id="active-accent"></div>
+        <div class="meme-info-years" id="active-duration"></div>
+        <div class="meme-info-salvage" id="active-salvage"></div>
+        <div class="meme-info-desc" id="active-description"></div>
+        <div class="contemporary-memes" id="contemporary-memes">
+          <div class="cm-label">CONTEMPORARIES</div>
+          <div class="cm-list" id="cm-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOMO Counter: memes missed -->
+    <div id="fomo-counter" class="hidden">
+      <div class="fomo-label">YOU MISSED</div>
+      <div class="fomo-value" id="fomo-value">0</div>
+      <div class="fomo-unit">memes while scrolling</div>
+    </div>
+
+    <!-- Consumption Report (Escape key to view) -->
+    <div id="consumption-report" class="hidden">
+      <div class="report-content">
+        <div class="report-title">CONSUMPTION REPORT</div>
+        <div class="report-sub">消費完了報告書</div>
+        <div class="report-stats">
+          <div class="stat-row">
+            <span class="stat-label">Total Memes Consumed</span>
+            <span class="stat-value" id="report-consumed">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Memes Salvaged</span>
+            <span class="stat-value" id="report-salvaged">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Memes Missed</span>
+            <span class="stat-value warn" id="report-missed">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Salvage Rate</span>
+            <span class="stat-value" id="report-rate">0%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Auto-Scroll Time</span>
+            <span class="stat-value" id="report-auto">0s</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Curation Score</span>
+            <span class="stat-value" id="report-score">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Combo Bonus</span>
+            <span class="stat-value" id="report-combo">+0</span>
+          </div>
+        </div>
+        <div class="report-grade" id="report-grade">CASUAL SCROLLER</div>
+        <div class="report-rank" id="report-rank">RANK D</div>
+        <div class="report-desc" id="report-desc">You excavated 26 years of internet strata. These are the 5 fossils you chose to preserve from oblivion.</div>
+        <div class="report-collection">
+          <div class="collection-title">ARCHIVED FOSSILS (永久保存)</div>
+          <div class="collection-grid" id="report-collection"></div>
+        </div>
+        <div class="report-forgotten" id="report-forgotten">
+          <div class="forgotten-count">0 fossils were left to decay</div>
+          <div class="forgotten-desc">Unsalvaged memes fade into geological noise</div>
+        </div>
+        <div class="report-scoreboard">
+          <div class="collection-title">HALL OF DIGGERS (スコアボード)</div>
+          <div id="scoreboard-list"></div>
+        </div>
+        <button id="report-close">EXCAVATE AGAIN →</button>
+      </div>
+    </div>
+
+    <!-- Auto-excavation indicator (idle drift) -->
+    <div id="auto-indicator" class="hidden">
+      <span class="auto-dot"></span>
+      <span>AUTO EXCAVATION — 操作すると手動に戻ります</span>
+    </div>
+
+    <!-- Glitch/Burn Overlay (Canvas) -->
+    <canvas id="glitch-overlay"></canvas>
+
+    <!-- Serial status -->
+    <div id="serial-indicator" class="hidden">
+      <span class="pulse-dot" id="serial-dot"></span>
+      <span id="serial-status">OFFLINE</span>
+    </div>
+
+    <!-- Timeline -->
+    <div id="timeline-wrapper" class="hidden">
+      <div id="timeline-pointer"></div>
+      <div id="timeline-ruler"></div>
+    </div>
+
+  </body>
+</html>
