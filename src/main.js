@@ -936,9 +936,18 @@ function animate() {
     -STRATA_Z_OFFSET
   );
 
-  // Find which stratum (year) the camera is currently inside
-  const currentStratum = strataMeshes.find(s => state.currentY >= s.yStart && state.currentY <= s.yEnd);
-  const cYear = currentStratum ? currentStratum.year : (state.currentY > state.landfillDepth ? CURRENT_YEAR : START_YEAR);
+  // Find nearest stratum by Y position (handles gaps between layers)
+  let nearestStratum = null;
+  let nearestDist = Infinity;
+  for (const s of strataMeshes) {
+    const midY = (s.yStart + s.yEnd) / 2;
+    const d = Math.abs(state.currentY - midY);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestStratum = s;
+    }
+  }
+  const cYear = nearestStratum ? nearestStratum.year : START_YEAR;
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
