@@ -68,10 +68,9 @@ describe('Stratum Accumulation (地層の蓄積)', () => {
     expect(multiDepth).toBeGreaterThan(singleDepth);
   });
 
-  it('total landfill depth should equal years of accumulated waste', () => {
+  it('strata depth should accumulate all active years', () => {
     const totalYears = mockMemes.reduce((sum, m) => sum + (m.diedYear - m.bornYear + 1), 0);
     const depth = calculateStrataDepth(mockMemes);
-    // More meme-years = deeper landfill
     expect(depth).toBeGreaterThan(totalYears * 0.1);
   });
 });
