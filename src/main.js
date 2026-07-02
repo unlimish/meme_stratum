@@ -948,10 +948,12 @@ function animate() {
     el.classList.toggle('active', el.id === `tick-year-${cYear}`);
   });
 
-  // ── Find active meme ──
+  // ── Find active meme — only in current stratum (year) ──
   let closestDist = Infinity;
   closest = null;
   for (const p of memePanels) {
+    // Only consider memes active during current year
+    if (p.data.bornYear > cYear || p.data.diedYear < cYear) continue;
     const d = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
     if (d < closestDist) {
       closestDist = d;
