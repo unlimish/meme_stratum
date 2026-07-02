@@ -1023,14 +1023,14 @@ function animate() {
         activeDescEl.classList.add('visible');
       }
 
-      // ── Contemporaries: other memes from same era ──
+      // ── Contemporaries: other memes from current era (by year, not by closest meme's birth) ──
       const cmList = document.getElementById('cm-list');
       if (cmList) {
         cmList.innerHTML = '';
-        const activeBorn = closest.data.bornYear;
-        // Find memes born within ±3 years, excluding current
+        const eraYear = cYear; // current year being viewed
+        // Find memes born within ±3 years of current era, excluding closest
         const contemporaries = memeData
-          .filter(m => m.id !== closest.data.id && Math.abs(m.bornYear - activeBorn) <= 3)
+          .filter(m => m.id !== closest.data.id && Math.abs(m.bornYear - eraYear) <= 3)
           .sort((a, b) => a.bornYear - b.bornYear)
           .slice(0, 5);
         const cmContainer = document.getElementById('contemporary-memes');
