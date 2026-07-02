@@ -527,11 +527,19 @@ function initThree() {
         new THREE.Vector3(endX, endY, midZ + 0.5)
       );
 
-      const tubeGeo = new THREE.TubeGeometry(curve, 24, 0.04, 6, false);
+      // Desaturate parent color for subtle vein
+      const pC = new THREE.Color(parent.color);
+      const gray = pC.r * 0.3 + pC.g * 0.59 + pC.b * 0.11;
+      const veinColor = new THREE.Color().setRGB(
+        pC.r * 0.3 + gray * 0.7,
+        pC.g * 0.3 + gray * 0.7,
+        pC.b * 0.3 + gray * 0.7
+      );
+      const tubeGeo = new THREE.TubeGeometry(curve, 24, 0.015, 6, false);
       const tubeMat = new THREE.MeshBasicMaterial({
-        color: parent.color,
+        color: veinColor,
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.12,
         side: THREE.DoubleSide,
       });
       const tube = new THREE.Mesh(tubeGeo, tubeMat);
@@ -1300,90 +1308,8 @@ function hideConsumptionReport() {
 
 reportCloseBtn.addEventListener('click', hideConsumptionReport);
 
-// ── Debug overlay (temporary) ──
-const debugInfo = document.createElement('div');
-debugInfo.style.cssText = `
-  position: fixed;
-  top: 100px;
-  right: 10px;
-  z-index: 200;
-  background: rgba(0,0,0,0.75);
-  color: #0f0;
-  font-family: 'SF Mono', monospace;
-  font-size: 10px;
-  padding: 8px;
-  max-width: 220px;
-  line-height: 1.5;
-  pointer-events: none;
-  border-radius: 4px;
-`;
-debugInfo.textContent = 'WAITING...';
-document.body.appendChild(debugInfo);
-
-// ── Debug panel (visible on screen) ──
-const debugDiv = document.createElement('div');
-debugDiv.id = 'debug-overlay';
-debugDiv.style.cssText = `
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 9999;
-  background: rgba(0,0,0,0.85);
-  color: #0f0;
-  font: 11px 'SF Mono', 'Consolas', monospace;
-  padding: 12px;
-  white-space: pre-wrap;
-  max-width: 320px;
-  max-height: 500px;
-  overflow: auto;
-  border-radius: 6px;
-  border: 1px solid #0f0;
-  line-height: 1.5;
-`;
-debugDiv.textContent = 'INITIALIZING...\n';
-document.body.appendChild(debugDiv);
-
-function debug(msg) {
-  debugDiv.textContent += msg + '\n';
-}
-
-// ── Init with error trapping ──
+// ── Init ──
 const glitchOverlay = new GlitchOverlay();
-
-try {
-  initThree();
-  debug(`✓ initThree OK`);
-  debug(`  strataMeshes: ${strataMeshes.length}`);
-  debug(`  memePanels: ${memePanels.length}`);
-  debug(`  veinMeshes: ${veinMeshes.length}`);
-  debug(`  currentY after init: ${state.currentY.toFixed(2)}`);
-} catch (e) {
-  debug(`✗ initThree FAILED`);
-  debug(`  ${e.name}: ${e.message}`);
-  debug(`  ${e.stack?.substring(0, 300) || 'no stack'}`);
-}
-
-try {
-  buildTimeline();
-  debug(`✓ buildTimeline OK`);
-} catch (e) {
-  debug(`✗ buildTimeline FAILED: ${e.message}`);
-}
-
-try {
-  animate();
-  debug(`✓ animate started`);
-} catch (e) {
-  debug(`✗ animate FAILED: ${e.message}`);
-}
-
-// Update debug info every frame
-setInterval(() => {
-  if (!closest) {
-    debugDiv.textContent = debugDiv.textContent.split('\n').slice(0, 8).join('\n') + '\n';
-    debug(`[LIVE] camY:${state.currentY.toFixed(1)} target:${state.targetY.toFixed(1)} closest:null panels:${memePanels.length}`);
-  } else {
-    debugDiv.textContent = debugDiv.textContent.split('\n').slice(0, 8).join('\n') + '\n';
-    debug(`[LIVE] camY:${state.currentY.toFixed(1)} closest:${closest.data.name.substring(0,10)} dist:${Math.abs(state.currentY-(closest.yStart+closest.yEnd)/2).toFixed(2)}`);
-  }
-}, 500);
+initThree();
+buildTimeline();
+animate();
