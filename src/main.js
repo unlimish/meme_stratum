@@ -889,11 +889,16 @@ function startExperience() {
   overlay.classList.add('hidden');
   hud.classList.remove('hidden');
   memeInfo.classList.remove('hidden');
-  serialIndicator.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
   metricsPanel.classList.remove('hidden');
   initAudio();
   resetIdleTimer();
+  // Auto-hide serial indicator if never connects
+  setTimeout(() => {
+    if (!state.isSerialConnected) {
+      serialIndicator.classList.add('hidden');
+    }
+  }, 3000);
 }
 
 connectBtn.addEventListener('click', () => startExperience());
