@@ -937,18 +937,9 @@ function animate() {
     -STRATA_Z_OFFSET
   );
 
-  // Find nearest stratum by Y position (handles gaps between layers)
-  let nearestStratum = null;
-  let nearestDist = Infinity;
-  for (const s of strataMeshes) {
-    const midY = (s.yStart + s.yEnd) / 2;
-    const d = Math.abs(state.currentY - midY);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearestStratum = s;
-    }
-  }
-  const cYear = nearestStratum ? nearestStratum.year : START_YEAR;
+  // Linear year mapping: layer thickness doesn't affect year display
+  const progress = Math.max(0, Math.min(1, state.currentY / state.landfillDepth));
+  const cYear = Math.round(START_YEAR + progress * TOTAL_YEARS);
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
@@ -1266,6 +1257,11 @@ let lastFomoCheckY = -5;
 const FOMO_THRESHOLD = 0.8;
 
 function updateFOMO() {
+  // Don't count "missed" memes during passive auto-scroll
+  if (state.autoScrolling) {
+    lastFomoCheckY = state.currentY;
+    return;
+  }
   if (state.scrollSpeed > FOMO_THRESHOLD) {
     const direction = state.targetY > lastFomoCheckY ? 1 : -1;
     const distance = Math.abs(state.currentY - lastFomoCheckY);
