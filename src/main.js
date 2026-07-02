@@ -417,12 +417,13 @@ function initThree() {
 
     const strataGeo = new THREE.BoxGeometry(12, layerThickness, LAYER_Z);
     const strataTex = createStrataTexture(year, memes, ageFactor, densityFactor);
-    const strataMat = new THREE.MeshStandardMaterial({
-      map: strataTex,
-      roughness: 0.7 + ageFactor * 0.3,
-      metalness: 0.0,
+    // Box faces: invisible — only edges define the cross-section
+    const strataMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
       transparent: true,
-      opacity: 0.08 + ageFactor * 0.04, // cross-section: nearly transparent
+      opacity: 0, // completely invisible faces
+      depthWrite: false,
+      side: THREE.BackSide, // render only back faces (away from camera)
     });
 
     const strataMesh = new THREE.Mesh(strataGeo, strataMat);
