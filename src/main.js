@@ -1328,6 +1328,26 @@ function hideConsumptionReport() {
 
 reportCloseBtn.addEventListener('click', hideConsumptionReport);
 
+// ── Debug overlay (temporary) ──
+const debugInfo = document.createElement('div');
+debugInfo.style.cssText = `
+  position: fixed;
+  top: 100px;
+  right: 10px;
+  z-index: 200;
+  background: rgba(0,0,0,0.75);
+  color: #0f0;
+  font-family: 'SF Mono', monospace;
+  font-size: 10px;
+  padding: 8px;
+  max-width: 220px;
+  line-height: 1.5;
+  pointer-events: none;
+  border-radius: 4px;
+`;
+debugInfo.textContent = 'WAITING...';
+document.body.appendChild(debugInfo);
+
 // ── Init ──
 const glitchOverlay = new GlitchOverlay();
 initThree();
