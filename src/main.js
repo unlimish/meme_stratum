@@ -57,7 +57,7 @@ const state = {
 
 // ── Idle / auto-scroll ──
 let idleTimer = null;
-const IDLE_DELAY = 20000;
+const IDLE_DELAY = 240000; // 4 minutes before auto-scroll starts
 const AUTO_SCROLL_SPEED = 1.2;
 function resetIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
@@ -937,9 +937,9 @@ function animate() {
     -STRATA_Z_OFFSET
   );
 
-  // Linear year mapping: layer thickness doesn't affect year display
+  // Linear year mapping: floor prevents flicker at boundaries
   const progress = Math.max(0, Math.min(1, state.currentY / state.landfillDepth));
-  const cYear = Math.round(START_YEAR + progress * TOTAL_YEARS);
+  const cYear = Math.floor(START_YEAR + progress * TOTAL_YEARS);
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
