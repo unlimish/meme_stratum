@@ -51,6 +51,7 @@ const state = {
   totalMemesConsumed: 0,
   totalMemesMissed: 0,
   reportShown: false,
+  hoveredContemporary: null,
 };
 
 // ── Idle / auto-scroll ──
@@ -1007,7 +1008,8 @@ function animate() {
   }
 
   // ── Update active meme display ──
-  if (closest) {
+  // Skip if hovering a contemporary (mouseleave will restore via animate)
+  if (closest && state.hoveredContemporary === null) {
     if (state.activeMeme !== closest.data) {
       state.activeMeme = closest.data;
       activeMemeEl.textContent = closest.data.name;
@@ -1047,16 +1049,31 @@ function animate() {
               <span class="cm-name">${cm.name}</span>
               <span class="cm-years">${cm.bornYear}</span>
             `;
-            // Hover: spotlight this meme in the strata
+            // Hover: spotlight this meme in the strata + temporarily show its info
             item.addEventListener('mouseenter', () => {
+              state.hoveredContemporary = cm;
               for (const p of memePanels) {
                 p.baseMat.userData.hoverTarget = (p.data.id === cm.id) ? 1.0 : 0.06;
               }
+              // Temporarily swap display to hovered contemporary
+              activeMemeEl.textContent = cm.name;
+              const dur = cm.diedYear - cm.bornYear || 1;
+              const typeLabel = { sudden: '⚡', fade: '⋯', resurrected: '↺' }[cm.deathType] || '';
+              activeDurEl.textContent = `${cm.bornYear} — ${cm.diedYear} · ${dur} YEAR${dur > 1 ? 'S' : ''} ${typeLabel}`;
+              const salvageValue = calculateSalvageValue(cm, CURRENT_YEAR);
+              activeSalvageEl.textContent = `Salvage Value: ${(salvageValue * 100).toFixed(0)}%`;
+              activeSalvageEl.classList.add('visible');
+              if (cm.description) {
+                activeDescEl.textContent = cm.description;
+                activeDescEl.classList.add('visible');
+              }
             });
             item.addEventListener('mouseleave', () => {
+              state.hoveredContemporary = null;
               for (const p of memePanels) {
                 p.baseMat.userData.hoverTarget = null;
               }
+              // Display will be restored by animate() on next frame
             });
             cmList.appendChild(item);
           }
