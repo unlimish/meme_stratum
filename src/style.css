@@ -364,7 +364,7 @@ body, html {
 /* ── Salvage Button ── */
 #salvage-btn {
   position: fixed;
-  bottom: 140px; /* between era-label and meme-info */
+  bottom: 200px; /* between era-label and meme-info */
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
