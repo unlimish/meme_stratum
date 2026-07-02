@@ -295,7 +295,7 @@ body, html {
 /* ── Active Meme Info ── */
 #meme-info {
   position: fixed;
-  bottom: 80px;
+  bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
@@ -364,7 +364,7 @@ body, html {
 /* ── Salvage Button ── */
 #salvage-btn {
   position: fixed;
-  bottom: 200px; /* was 160px, meme-info overlaps at ~80px bottom */
+  bottom: 280px; /* clear above meme-info which can grow tall */
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
