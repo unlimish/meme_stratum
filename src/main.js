@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { memeData, getRarity, getGrade } from './memeData.js';
+import { memeData, getRarity, getGrade, calculateCurationScore, getCurationRank } from './memeData.js';
 
 // ─────────────────────────────────────────────
 //  MEME STRATUM — Geological Excavation as
@@ -29,7 +29,12 @@ const CONSUMPTION_LIMIT = 200;
 const SALVAGE_CAPACITY_MAX = 5;
 
 // ── State ──
+// mode drives the exhibition loop:
+//   attract — title overlay over a slowly drifting scene, waiting for a visitor
+//   active  — a visitor is excavating
+//   report  — consumption report is up (manual via Esc, or automatic at session end)
 const state = {
+  mode: 'attract',
   currentY: -5,
   targetY: -5,
   timeRange: { min: 0, max: TOTAL_YEARS * K_Y + 5 },
@@ -50,19 +55,22 @@ const state = {
   activeScrollTime: 0,
   totalMemesConsumed: 0,
   totalMemesMissed: 0,
-  reportShown: false,
   hoveredContemporary: null,
   lastCY: null,
 };
 
-// ── Idle / auto-scroll ──
-let idleTimer = null;
-const IDLE_DELAY = 240000; // 4 minutes before auto-scroll starts
+// ── Idle pacing (unattended gallery loop) ──
+// Visitors walk away without closing anything: the piece must drift, report,
+// and reset itself so the next visitor always gets a fresh dig with 5 salvages.
+const IDLE_AUTO_SCROLL_MS = 30000;  // no input → the excavator keeps digging on its own
+const IDLE_RESET_MS = 120000;       // no input → session ends (report if they salvaged, then attract)
+const REPORT_LINGER_MS = 45000;     // report left open → back to attract
 const AUTO_SCROLL_SPEED = 1.2;
+let lastInputAt = performance.now();
+let reportOpenedAt = 0;
 function resetIdleTimer() {
-  if (idleTimer) clearTimeout(idleTimer);
-  state.autoScrolling = false;
-  idleTimer = setTimeout(() => { state.autoScrolling = true; }, IDLE_DELAY);
+  lastInputAt = performance.now();
+  if (state.mode === 'active') state.autoScrolling = false;
 }
 
 // ── DOM ──
@@ -96,6 +104,9 @@ const warningEl = document.querySelector('#metrics-panel .warning');
 const salvageBtn = document.getElementById('salvage-btn');
 const reportPanel = document.getElementById('consumption-report');
 const reportCloseBtn = document.getElementById('report-close');
+const autoIndicator = document.getElementById('auto-indicator');
+const curationScoreEl = document.getElementById('curation-score');
+const curationRankEl = document.getElementById('curation-rank');
 
 // ── Three.js ──
 let scene, camera, renderer;
@@ -370,7 +381,10 @@ function createFossilTexture(meme, ageFactor, isSalvaged) {
     const im = new Image();
     im.crossOrigin = 'anonymous';
     im.onload = () => draw(im);
-    im.onerror = () => {};
+    // Images are bundled locally; fall back to the original remote URL just in case
+    im.onerror = () => {
+      if (meme.remoteUrl && im.src !== meme.remoteUrl) im.src = meme.remoteUrl;
+    };
     im.src = meme.imageUrl;
   }
   return tex;
@@ -496,6 +510,8 @@ function initThree() {
         yStart: currentY,
         yEnd: currentY + layerThickness,
         baseMat: mat,
+        ageFactor,
+        viewedS: 0,
       });
     }
 
@@ -618,8 +634,10 @@ function updateMetrics() {
   state.isWarning = consumptionPercent > 90 && state.consumptionVelocity > 2;
   warningEl.style.display = state.isWarning ? 'block' : 'none';
 
-  // Update salvage button
-  if (closest && state.salvageRemaining > 0 && !state.salvagedMemes.has(closest.data.id)) {
+  // Update salvage button (never while attract/report — it stays clickable even when faded)
+  if (state.mode !== 'active') {
+    salvageBtn.classList.add('hidden');
+  } else if (closest && state.salvageRemaining > 0 && !state.salvagedMemes.has(closest.data.id)) {
     salvageBtn.textContent = `CLICK TO SALVAGE (${state.salvageRemaining} left)`;
     salvageBtn.classList.remove('hidden', 'exhausted');
   } else if (closest && state.salvageRemaining === 0) {
@@ -664,6 +682,8 @@ function showSalvageFlash() {
   }, 800);
 }
 
+const retexturedPanels = [];
+
 function handleSalvage() {
   if (!closest || state.salvageRemaining <= 0 || state.salvagedMemes.has(closest.data.id)) return;
 
@@ -676,6 +696,21 @@ function handleSalvage() {
   closest.baseMat.map = newTex;
   closest.baseMat.opacity = 1.0; // fully opaque when salvaged
   closest.baseMat.needsUpdate = true;
+  retexturedPanels.push(closest);
+
+  // Curation score (live HUD metric)
+  const salvagedList = Array.from(state.salvagedMemes)
+    .map(id => memeData.find(m => m.id === id)).filter(Boolean);
+  const score = calculateCurationScore(salvagedList);
+  curationScoreEl.textContent = score.total;
+  curationRankEl.textContent = getCurationRank(score.total);
+
+  // Fifth salvage completes the dig: the report is the payoff
+  if (state.salvagedMemes.size >= SALVAGE_CAPACITY_MAX) {
+    setTimeout(() => {
+      if (state.mode === 'active') showConsumptionReport();
+    }, 1800);
+  }
 
   // Physical "pop" animation toward camera
   const targetZ = closest.mesh.position.z + 2.0;
@@ -759,10 +794,12 @@ window.addEventListener('keydown', e => {
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') state.targetY += K_Y;
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') state.targetY -= K_Y;
   if (e.key === 'Escape') {
-    if (reportPanel.classList.contains('hidden')) {
-      showConsumptionReport();
-    } else {
+    if (state.mode === 'report') {
       hideConsumptionReport();
+    } else if (state.mode === 'active' && state.totalMemesConsumed >= 1) {
+      // Only once the visitor has actually consumed something — a report on an
+      // empty session (e.g. Escape as the very first key) would be noise
+      showConsumptionReport();
     }
   }
   clampY();
@@ -879,12 +916,24 @@ function updateAudio() {
   filterNode.frequency.setTargetAtTime(80 + speed * 15 + depth * 30, audioCtx.currentTime, 0.15);
 
   noiseGain.gain.setTargetAtTime(Math.min(0.08, speed * 0.02), audioCtx.currentTime, 0.05);
+
+  // Quieter ambience while the piece waits for a visitor
+  gainNode.gain.setTargetAtTime(state.mode === 'active' ? 0.15 : 0.05, audioCtx.currentTime, 1.5);
 }
 
 // ─────────────────────────────────────────────
-//  STARTUP
+//  EXHIBITION LOOP — attract ⇄ active ⇄ report
 // ─────────────────────────────────────────────
 function startExperience() {
+  // Fresh counters: attract drift may have accumulated consumption
+  state.totalConsumption = 0;
+  state.totalMemesConsumed = 0;
+  state.autoScrollTime = 0;
+  state.activeScrollTime = 0;
+  resetFomo();
+
+  state.mode = 'active';
+  state.autoScrolling = false;
   overlay.classList.add('hidden');
   hud.classList.remove('hidden');
   memeInfo.classList.remove('hidden');
@@ -900,12 +949,102 @@ function startExperience() {
   }, 3000);
 }
 
+// Restore every fossil and counter so the next visitor gets a fresh dig
+function resetSession() {
+  for (const p of retexturedPanels) {
+    const tex = createFossilTexture(p.data, p.ageFactor, false);
+    p.baseMat.map = tex;
+    p.baseMat.needsUpdate = true;
+  }
+  retexturedPanels.length = 0;
+
+  for (const p of memePanels) {
+    p.viewedS = 0;
+    p.baseMat.opacity = 0.75;
+    p.baseMat.color = new THREE.Color(1, 1, 1);
+    p.baseMat.userData.hoverTarget = null;
+    p.mesh.scale.setScalar(1.0);
+  }
+
+  state.salvagedMemes.clear();
+  state.salvageRemaining = SALVAGE_CAPACITY_MAX;
+  state.totalConsumption = 0;
+  state.totalMemesConsumed = 0;
+  state.autoScrollTime = 0;
+  state.activeScrollTime = 0;
+  state.isWarning = false;
+  state.activeMeme = null;
+  state.hoveredContemporary = null;
+  state.lastCY = null;
+  resetFomo();
+
+  curationScoreEl.textContent = '0';
+  curationRankEl.textContent = '-';
+  activeMemeEl.textContent = '';
+  activeDurEl.textContent = '';
+  activeSalvageEl.classList.remove('visible');
+  activeDescEl.classList.remove('visible');
+  const cmContainer = document.getElementById('contemporary-memes');
+  if (cmContainer) cmContainer.classList.add('hidden');
+}
+
+function enterAttract() {
+  resetSession();
+  state.mode = 'attract';
+  reportPanel.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  hud.classList.add('hidden');
+  memeInfo.classList.add('hidden');
+  timelineWrapper.classList.add('hidden');
+  metricsPanel.classList.add('hidden');
+  // Rewind to the bottom of the dig; the drift then climbs through all strata
+  state.targetY = -2;
+  state.autoScrolling = false; // resumes once the rewind settles (see animate)
+  resetIdleTimer();
+}
+
+// Visitor walked away: wrap up their session
+function endSession() {
+  if (state.salvagedMemes.size > 0) {
+    showConsumptionReport();
+  } else {
+    enterAttract();
+  }
+}
+
 connectBtn.addEventListener('click', () => startExperience());
 serialBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
   startExperience();
   await initSerial();
 });
+
+// Any input while in attract mode starts a session (gallery visitors won't
+// hunt for a button). The same gestures unlock audio if it's still suspended.
+function ensureAudioRunning() {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+for (const ev of ['mousedown', 'keydown', 'wheel', 'touchstart']) {
+  window.addEventListener(ev, () => {
+    ensureAudioRunning();
+    if (state.mode === 'attract') startExperience();
+  }, { capture: true, passive: true });
+}
+
+// ── Kiosk hardening ──
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('dragstart', e => e.preventDefault());
+document.addEventListener('gesturestart', e => e.preventDefault());
+
+// Cursor fades out when the mouse rests
+let cursorTimer = null;
+function wakeCursor() {
+  document.body.classList.remove('cursor-hidden');
+  if (cursorTimer) clearTimeout(cursorTimer);
+  cursorTimer = setTimeout(() => document.body.classList.add('cursor-hidden'), 4000);
+}
+window.addEventListener('mousemove', wakeCursor);
+wakeCursor();
 
 // ─────────────────────────────────────────────
 //  ANIMATE
@@ -921,6 +1060,22 @@ function animate() {
   state.currentY = THREE.MathUtils.lerp(state.currentY, state.targetY, lerpFactor);
   state.scrollSpeed = Math.abs(state.currentY - prevY);
   state.excavationDepth = state.currentY;
+
+  // ── Exhibition idle loop ──
+  const idleMs = performance.now() - lastInputAt;
+  if (state.mode === 'active') {
+    if (idleMs > IDLE_RESET_MS) {
+      endSession();
+    } else if (idleMs > IDLE_AUTO_SCROLL_MS) {
+      state.autoScrolling = true;
+    }
+  } else if (state.mode === 'attract') {
+    // Let the rewind glide settle, then drift endlessly through the strata
+    state.autoScrolling = Math.abs(state.targetY - state.currentY) < 2;
+  } else if (state.mode === 'report') {
+    if (performance.now() - reportOpenedAt > REPORT_LINGER_MS) enterAttract();
+  }
+  autoIndicator.classList.toggle('hidden', !(state.autoScrolling && state.mode === 'active'));
 
   if (state.autoScrolling) {
     state.targetY += AUTO_SCROLL_SPEED * 0.016;
@@ -983,10 +1138,10 @@ function animate() {
       const pulse = 0.98 + Math.sin(t * 1.5) * 0.02;
       p.mesh.scale.setScalar(pulse);
     } else {
-      // Unsalvaged: gradual decay (fade to geological noise)
-      const ageInView = (performance.now() - (p.baseMat.userData.lastSeen || performance.now())) / 1000;
-      p.baseMat.userData.lastSeen = performance.now();
-      const decay = Math.min(0.6, ageInView * 0.002);
+      // Unsalvaged: the longer a fossil has been consumed (in view), the more it
+      // weathers into the stratum — only during a visitor's session
+      if (inRange && state.mode === 'active') p.viewedS += 0.016;
+      const decay = Math.min(0.35, p.viewedS * 0.006);
       const targetOpacity = isActive ? 1.0 : (inRange ? Math.max(0.15, 0.7 - decay) : Math.max(0.04, 0.12 - decay));
       p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, targetOpacity, 0.04);
       p.mesh.scale.setScalar(1.0);
@@ -1178,9 +1333,9 @@ function animate() {
   updateAudio();
   renderer.render(scene, camera);
 
-  // Glitch overlay responds to consumption velocity
+  // Glitch overlay responds to consumption velocity — only while a visitor drives
   if (typeof glitchOverlay !== 'undefined') {
-    glitchOverlay.update(state.scrollSpeed);
+    glitchOverlay.update(state.mode === 'active' ? state.scrollSpeed : 0);
   }
 }
 
@@ -1270,9 +1425,17 @@ let fomoCount = 0;
 let lastFomoCheckY = -5;
 const FOMO_THRESHOLD = 0.8;
 
+function resetFomo() {
+  fomoCount = 0;
+  fomoValue.textContent = '0';
+  fomoCounter.classList.add('hidden');
+  fomoCounter.classList.remove('visible');
+  lastFomoCheckY = state.currentY;
+}
+
 function updateFOMO() {
-  // Don't count "missed" memes during passive auto-scroll
-  if (state.autoScrolling) {
+  // Only count "missed" memes while a visitor is actively driving
+  if (state.mode !== 'active' || state.autoScrolling) {
     lastFomoCheckY = state.currentY;
     return;
   }
@@ -1304,8 +1467,9 @@ setInterval(updateFOMO, 500);
 
 // ── Consumption Report ──
 function showConsumptionReport() {
-  if (state.reportShown) return;
-  state.reportShown = true;
+  if (state.mode === 'report') return;
+  state.mode = 'report';
+  reportOpenedAt = performance.now();
 
   document.getElementById('report-consumed').textContent = Math.floor(state.totalMemesConsumed);
   document.getElementById('report-salvaged').textContent = state.salvagedMemes.size;
@@ -1320,6 +1484,13 @@ function showConsumptionReport() {
 
   // Generate narrative from salvaged memes
   const salvagedList = Array.from(state.salvagedMemes).map(id => memeData.find(m => m.id === id)).filter(Boolean);
+
+  // Curation score + rank
+  const score = calculateCurationScore(salvagedList);
+  document.getElementById('report-score').textContent = score.total;
+  document.getElementById('report-combo').textContent = '+' + score.comboBonus;
+  document.getElementById('report-rank').textContent = 'RANK ' + getCurationRank(score.total);
+
   const mythicCount = salvagedList.filter(m => getRarity(m) === 'MYTHIC').length;
   const suddenCount = salvagedList.filter(m => m.deathType === 'sudden').length;
   const resurrectedCount = salvagedList.filter(m => m.deathType === 'resurrected').length;
@@ -1336,14 +1507,7 @@ function showConsumptionReport() {
   } else {
     narrative = 'You curated a balanced history. Neither spectacle nor eternity — just human memory.';
   }
-
-  const descs = {
-    'CONSCIOUS CONSUMER': narrative,
-    'ATTENTION DEFICIT': narrative,
-    'BINGE CONSUMER': narrative,
-    'CASUAL SCROLLER': narrative,
-  };
-  document.getElementById('report-desc').textContent = descs[grade] || narrative;
+  document.getElementById('report-desc').textContent = narrative;
 
   // Collection grid
   const grid = document.getElementById('report-collection');
@@ -1369,8 +1533,15 @@ function showConsumptionReport() {
   reportPanel.classList.remove('hidden');
 }
 
+// "EXCAVATE AGAIN" — a visitor is still here: reset and hand them a fresh dig
 function hideConsumptionReport() {
+  if (state.mode !== 'report') return;
   reportPanel.classList.add('hidden');
+  resetSession();
+  state.mode = 'active';
+  // Rewind to the bottom; the long glide back through the strata is the transition
+  state.targetY = -2;
+  resetIdleTimer();
 }
 
 reportCloseBtn.addEventListener('click', hideConsumptionReport);
@@ -1379,4 +1550,5 @@ reportCloseBtn.addEventListener('click', hideConsumptionReport);
 const glitchOverlay = new GlitchOverlay();
 initThree();
 buildTimeline();
+enterAttract();
 animate();

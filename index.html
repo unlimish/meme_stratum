@@ -2,11 +2,10 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Meme Stratum — ミームの地層</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Outfit:wght@100;200;300;400;700;900&display=swap" rel="stylesheet">
+    <!-- Fonts are bundled locally: the piece must survive without network -->
+    <link rel="stylesheet" href="/fonts/fonts.css" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -24,11 +23,12 @@
         <div class="overlay-sub">ミームの地層</div>
         <div class="overlay-desc">
           <span>Scroll to excavate 26 years of internet culture</span>
-          <span class="jp">スクロールで26年のインターネット文化を発掘する</span>
+          <span class="jp">スクロール／ドラッグ／矢印キーで、26年分のインターネット文化を発掘する</span>
           <span class="jp">SALVAGE で5体のミームを永久保存 · 選ばなかったミームは風化して忘れ去られる</span>
-          <span class="jp warn">デジタル考古学者として、あなたは52体の中からたった5体を選ぶ</span>
+          <span class="jp warn">デジタル考古学者として、あなたは53体の中からたった5体を選ぶ</span>
         </div>
         <button id="connect-btn">ENTER</button>
+        <div class="overlay-hint">クリック・スクロール・キー操作で開始 / any input to begin</div>
         <div class="overlay-serial">
           <button id="serial-btn" class="serial-link">CONNECT ROTARY ENCODER</button>
         </div>
@@ -141,6 +141,12 @@
         </div>
         <button id="report-close">EXCAVATE AGAIN →</button>
       </div>
+    </div>
+
+    <!-- Auto-excavation indicator (idle drift) -->
+    <div id="auto-indicator" class="hidden">
+      <span class="auto-dot"></span>
+      <span>AUTO EXCAVATION — 操作すると手動に戻ります</span>
     </div>
 
     <!-- Glitch/Burn Overlay (Canvas) -->
