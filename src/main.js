@@ -422,12 +422,42 @@ function initThree() {
       roughness: 0.7 + ageFactor * 0.3,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.85 + ageFactor * 0.1,
+      opacity: 0.08 + ageFactor * 0.04, // cross-section: nearly transparent
     });
 
     const strataMesh = new THREE.Mesh(strataGeo, strataMat);
     strataMesh.position.set(0, currentY + layerThickness / 2, -STRATA_Z_OFFSET);
     scene.add(strataMesh);
+
+    // ── Cross-section boundary lines (top and bottom edges) ──
+    const edgeColor = new THREE.Color(w.hex);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: edgeColor,
+      transparent: true,
+      opacity: 0.45 + ageFactor * 0.2,
+    });
+    // Top edge
+    const topPts = [
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+    ];
+    const topGeo = new THREE.BufferGeometry().setFromPoints(topPts);
+    const topLine = new THREE.Line(topGeo, edgeMat);
+    scene.add(topLine);
+    // Bottom edge
+    const botPts = [
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+    ];
+    const botGeo = new THREE.BufferGeometry().setFromPoints(botPts);
+    const botLine = new THREE.Line(botGeo, edgeMat);
+    scene.add(botLine);
 
     strataMeshes.push({
       mesh: strataMesh,
