@@ -417,30 +417,14 @@ function initThree() {
 
     const strataGeo = new THREE.BoxGeometry(12, layerThickness, LAYER_Z);
     const strataTex = createStrataTexture(year, memes, ageFactor, densityFactor);
-    // Box faces: invisible — only edges define the cross-section
-    const strataMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      transparent: true,
-      opacity: 0, // completely invisible faces
-      depthWrite: false,
-      side: THREE.BackSide, // render only back faces (away from camera)
-    });
-
-    const strataMesh = new THREE.Mesh(strataGeo, strataMat);
-    strataMesh.position.set(0, currentY + layerThickness / 2, -STRATA_Z_OFFSET);
-    scene.add(strataMesh);
-
     // ── Cross-section boundary lines (top and bottom edges) ──
-    // Use age-based warm tones without referencing internal weatherColor var
-    const edgeColor = new THREE.Color().setHSL(
-      0.08 + ageFactor * 0.02, // warm browns
-      0.25 + densityFactor * 0.1,
-      0.55 - ageFactor * 0.12
-    );
+    // No box faces at all — just thin horizontal wireframe lines
+    const edgeGray = Math.round(120 - ageFactor * 40);
+    const edgeColor = new THREE.Color(`rgb(${edgeGray}, ${edgeGray}, ${edgeGray})`);
     const edgeMat = new THREE.LineBasicMaterial({
       color: edgeColor,
       transparent: true,
-      opacity: 0.45 + ageFactor * 0.2,
+      opacity: 0.35 + ageFactor * 0.15,
     });
     // Top edge
     const topPts = [
@@ -465,8 +449,9 @@ function initThree() {
     const botLine = new THREE.Line(botGeo, edgeMat);
     scene.add(botLine);
 
+    // Push dummy strata record for tracking (no visible mesh)
     strataMeshes.push({
-      mesh: strataMesh,
+      mesh: null,
       year,
       yStart: currentY,
       yEnd: currentY + layerThickness,
