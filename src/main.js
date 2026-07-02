@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { memeData } from './memeData.js';
+import { memeData, getRarity, getGrade } from './memeData.js';
 
 // ─────────────────────────────────────────────
 //  MEME STRATUM — Geological Excavation as
@@ -45,6 +45,12 @@ const state = {
   salvageRemaining: SALVAGE_CAPACITY_MAX,
   salvagedMemes: new Set(),
   isWarning: false,
+  // Report tracking
+  autoScrollTime: 0,
+  activeScrollTime: 0,
+  totalMemesConsumed: 0,
+  totalMemesMissed: 0,
+  reportShown: false,
 };
 
 // ── Idle / auto-scroll ──
@@ -86,6 +92,8 @@ const depthEl = document.getElementById('landfill-depth');
 const salvageCapEl = document.getElementById('salvage-capacity');
 const warningEl = document.querySelector('#metrics-panel .warning');
 const salvageBtn = document.getElementById('salvage-btn');
+const reportPanel = document.getElementById('consumption-report');
+const reportCloseBtn = document.getElementById('report-close');
 
 // ── Three.js ──
 let scene, camera, renderer;
@@ -726,6 +734,13 @@ window.addEventListener('mouseup', () => {
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') state.targetY += K_Y;
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') state.targetY -= K_Y;
+  if (e.key === 'Escape') {
+    if (reportPanel.classList.contains('hidden')) {
+      showConsumptionReport();
+    } else {
+      hideConsumptionReport();
+    }
+  }
   clampY();
   resetIdleTimer();
 });
@@ -993,6 +1008,14 @@ function animate() {
   // ── Update satirical metrics ──
   updateMetrics();
 
+  // ── Track consumption for report ──
+  state.totalMemesConsumed += state.consumptionVelocity * 0.016;
+  if (state.autoScrolling) {
+    state.autoScrollTime += 0.016;
+  } else {
+    state.activeScrollTime += 0.016;
+  }
+
   // ── Ambient particles ──
   if (particles) {
     const arr = particles.geometry.attributes.position.array;
@@ -1169,6 +1192,52 @@ function updateFOMO() {
 }
 
 setInterval(updateFOMO, 500);
+
+// ── Consumption Report ──
+function showConsumptionReport() {
+  if (state.reportShown) return;
+  state.reportShown = true;
+
+  document.getElementById('report-consumed').textContent = Math.floor(state.totalMemesConsumed);
+  document.getElementById('report-salvaged').textContent = state.salvagedMemes.size;
+  document.getElementById('report-missed').textContent = fomoCount;
+
+  const rate = state.totalMemesConsumed > 0 ? Math.round((state.salvagedMemes.size / state.totalMemesConsumed) * 100) : 0;
+  document.getElementById('report-rate').textContent = rate + '%';
+  document.getElementById('report-auto').textContent = Math.floor(state.autoScrollTime) + 's';
+
+  const grade = getGrade(Math.floor(state.totalMemesConsumed), state.salvagedMemes.size, fomoCount);
+  document.getElementById('report-grade').textContent = grade;
+
+  const descs = {
+    'CONSCIOUS CONSUMER': 'You carefully examined what you consumed. A rare act of digital mindfulness.',
+    'ATTENTION DEFICIT': 'You scrolled past most of what you encountered. The algorithm won.',
+    'BINGE CONSUMER': 'You consumed everything in your path. Quantity over quality, always.',
+    'CASUAL SCROLLER': 'You dipped in and out. Neither fully present nor fully absent.',
+  };
+  document.getElementById('report-desc').textContent = descs[grade] || descs['CASUAL SCROLLER'];
+
+  // Collection grid
+  const grid = document.getElementById('report-collection');
+  grid.innerHTML = '';
+  for (const memeId of state.salvagedMemes) {
+    const meme = memeData.find(m => m.id === memeId);
+    if (!meme) continue;
+    const item = document.createElement('div');
+    item.className = 'collection-item';
+    item.style.backgroundImage = `url(${meme.imageUrl})`;
+    item.setAttribute('data-rarity', getRarity(meme));
+    grid.appendChild(item);
+  }
+
+  reportPanel.classList.remove('hidden');
+}
+
+function hideConsumptionReport() {
+  reportPanel.classList.add('hidden');
+}
+
+reportCloseBtn.addEventListener('click', hideConsumptionReport);
 
 // ── Init ──
 const glitchOverlay = new GlitchOverlay();

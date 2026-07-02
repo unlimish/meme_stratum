@@ -85,6 +85,43 @@
       <div class="fomo-unit">memes while scrolling</div>
     </div>
 
+    <!-- Consumption Report (Escape key to view) -->
+    <div id="consumption-report" class="hidden">
+      <div class="report-content">
+        <div class="report-title">CONSUMPTION REPORT</div>
+        <div class="report-sub">消費完了報告書</div>
+        <div class="report-stats">
+          <div class="stat-row">
+            <span class="stat-label">Total Memes Consumed</span>
+            <span class="stat-value" id="report-consumed">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Memes Salvaged</span>
+            <span class="stat-value" id="report-salvaged">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Memes Missed</span>
+            <span class="stat-value warn" id="report-missed">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Salvage Rate</span>
+            <span class="stat-value" id="report-rate">0%</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Auto-Scroll Time</span>
+            <span class="stat-value" id="report-auto">0s</span>
+          </div>
+        </div>
+        <div class="report-grade" id="report-grade">CASUAL SCROLLER</div>
+        <div class="report-desc" id="report-desc">You scrolled through decades of internet culture without a second thought.</div>
+        <div class="report-collection">
+          <div class="collection-title">COLLECTED FOSSILS</div>
+          <div class="collection-grid" id="report-collection"></div>
+        </div>
+        <button id="report-close">CONTINUE CONSUMING →</button>
+      </div>
+    </div>
+
     <!-- Glitch/Burn Overlay (Canvas) -->
     <canvas id="glitch-overlay"></canvas>
 

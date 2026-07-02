@@ -53,3 +53,25 @@ export const memeData = [
   { id: "hawktuah", name: "Hawk Tuah", bornYear: 2024, diedYear: 2025, color: "#ff8888", text: "SPIT ON THAT THANG", imageUrl: "https://i.imgflip.com/8ufgni.jpg", deathType: "sudden", influencedBy: [], description: "路上インタビューの女性が一発でスターに。TikTok時代の「瞬間の名声」と商業化。" },
   { id: "chillguy", name: "Chill Guy", bornYear: 2024, diedYear: 2026, color: "#ddaa77", text: "I'M JUST A CHILL GUY", imageUrl: "https://i.imgflip.com/9au02y.png", deathType: "resurrected", influencedBy: ["stonks"], description: "Meme Manの最新形。ストイック/デタッチメントが賞賛される時代の精神性。" }
 ];
+
+// Rarity calculation based on lifespan and death type
+export function getRarity(meme) {
+  const lifespan = meme.diedYear - meme.bornYear;
+  let score = lifespan;
+  if (meme.deathType === 'resurrected') score += 5;
+  if (meme.deathType === 'sudden') score -= 3;
+  if (score >= 15) return 'MYTHIC';
+  if (score >= 8) return 'RARE';
+  if (score >= 3) return 'UNCOMMON';
+  return 'DISPOSABLE';
+}
+
+// Grade user consumption pattern
+export function getGrade(consumed, salvaged, missed) {
+  const salvageRate = consumed > 0 ? salvaged / consumed : 0;
+  const missRate = consumed > 0 ? missed / consumed : 0;
+  if (salvageRate > 0.3) return 'CONSCIOUS CONSUMER';
+  if (missRate > 0.5) return 'ATTENTION DEFICIT';
+  if (consumed > 100) return 'BINGE CONSUMER';
+  return 'CASUAL SCROLLER';
+}

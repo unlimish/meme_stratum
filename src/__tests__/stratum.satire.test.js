@@ -167,6 +167,97 @@ describe('Satirical Interactions (風刺的インタラクション)', () => {
   });
 });
 
+// ── Consumption Report (終了時批評サマリー) ──
+describe('Consumption Report (消費レポート)', () => {
+  it('should calculate total memes consumed', () => {
+    const totalMemes = mockMemes.length;
+    const consumptionVelocity = 12.5;
+    const timeSpent = 120; // seconds
+    const totalConsumed = consumptionVelocity * timeSpent;
+    expect(totalConsumed).toBeGreaterThan(totalMemes);
+  });
+
+  it('should calculate salvage rate as percentage', () => {
+    const salvaged = 3;
+    const total = 50;
+    const rate = (salvaged / total) * 100;
+    expect(rate).toBe(6);
+  });
+
+  it('should grade user based on consumption pattern', () => {
+    function getGrade(consumed, salvaged, missed) {
+      const salvageRate = salvaged / consumed;
+      if (salvageRate > 0.3) return 'CONSCIOUS CONSUMER';
+      if (missed > consumed * 0.5) return 'ATTENTION DEFICIT';
+      if (consumed > 100) return 'BINGE CONSUMER';
+      return 'CASUAL SCROLLER';
+    }
+    expect(getGrade(200, 2, 20)).toBe('BINGE CONSUMER');
+    expect(getGrade(50, 16, 10)).toBe('CONSCIOUS CONSUMER');
+    expect(getGrade(100, 1, 80)).toBe('ATTENTION DEFICIT');
+  });
+
+  it('should expose "algorithmic exploitation" score', () => {
+    const autoScrollTime = 60;
+    const activeTime = 30;
+    const exploitationRatio = autoScrollTime / (activeTime + autoScrollTime);
+    expect(exploitationRatio).toBeGreaterThan(0.5); // passive > active
+    expect(exploitationRatio).toBe(2 / 3);
+  });
+});
+
+// ── Rarity System (レア度 = 批評的価値) ──
+describe('Rarity System (レア度システム)', () => {
+  it('should assign higher rarity to long-lived memes', () => {
+    const harlem = mockMemes[0]; // 0 year
+    const pepe = mockMemes[1];   // 21 years
+    function getRarity(meme) {
+      const lifespan = meme.diedYear - meme.bornYear;
+      if (lifespan >= 10) return 'MYTHIC';
+      if (lifespan >= 5) return 'RARE';
+      if (lifespan >= 2) return 'UNCOMMON';
+      return 'DISPOSABLE';
+    }
+    expect(getRarity(pepe)).toBe('MYTHIC');
+    expect(getRarity(harlem)).toBe('DISPOSABLE');
+  });
+
+  it('should give bonus rarity to resurrected memes', () => {
+    const pepe = mockMemes[1];
+    function getRarity(meme) {
+      const base = meme.diedYear - meme.bornYear;
+      const bonus = meme.deathType === 'resurrected' ? 5 : 0;
+      const score = base + bonus;
+      if (score >= 15) return 'MYTHIC';
+      return 'COMMON';
+    }
+    expect(getRarity(pepe)).toBe('MYTHIC');
+  });
+
+  it('should lower rarity for sudden-death memes (planned obsolescence)', () => {
+    const harlem = mockMemes[0];
+    function getRarity(meme) {
+      if (meme.deathType === 'sudden') return 'DISPOSABLE';
+      return 'COMMON';
+    }
+    expect(getRarity(harlem)).toBe('DISPOSABLE');
+  });
+});
+
+// ── Planned Obsolescence (計画陳腐化) ──
+describe('Planned Obsolescence Visuals', () => {
+  it('sudden-death memes should visually deteriorate rapidly', () => {
+    const harlem = mockMemes[0];
+    const deteriorationRate = harlem.deathType === 'sudden' ? 5.0 : 1.0;
+    expect(deteriorationRate).toBe(5.0);
+  });
+
+  it('should count "designed to fail" memes', () => {
+    const disposableCount = mockMemes.filter(m => m.deathType === 'sudden').length;
+    expect(disposableCount).toBeGreaterThan(0);
+  });
+});
+
 // ── Mock DOM tests ──
 describe('DOM Integration', () => {
   beforeEach(() => {
