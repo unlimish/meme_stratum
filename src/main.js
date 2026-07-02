@@ -669,34 +669,93 @@ function updateMetrics() {
 // ─────────────────────────────────────────────
 //  SALVAGE INTERACTION
 // ─────────────────────────────────────────────
+// ── Salvage flash text (DOM overlay for visibility) ──
+function showSalvageFlash() {
+  const flash = document.createElement('div');
+  flash.textContent = '★ SALVAGED ★';
+  flash.style.cssText = `
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 900;
+    font-size: 3rem;
+    color: #ffcc00;
+    text-shadow: 0 0 40px rgba(255, 200, 0, 0.8), 0 0 80px rgba(255, 150, 0, 0.4);
+    pointer-events: none;
+    z-index: 50;
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0;
+  `;
+  document.body.appendChild(flash);
+  requestAnimationFrame(() => {
+    flash.style.opacity = '1';
+    flash.style.transform = 'translate(-50%, -50%) scale(1.2)';
+  });
+  setTimeout(() => {
+    flash.style.opacity = '0';
+    flash.style.transform = 'translate(-50%, -50%) scale(1.5)';
+    setTimeout(() => flash.remove(), 600);
+  }, 800);
+}
+
 function handleSalvage() {
   if (!closest || state.salvageRemaining <= 0 || state.salvagedMemes.has(closest.data.id)) return;
 
   state.salvageRemaining--;
   state.salvagedMemes.add(closest.data.id);
 
-  // Re-render fossil texture with salvage stamp
+  // Re-render fossil texture with salvage stamp (sharp, bright)
   const ageFactor = Math.min((closest.data.bornYear - START_YEAR) / TOTAL_YEARS, 1);
   const newTex = createFossilTexture(closest.data, ageFactor, true);
   closest.baseMat.map = newTex;
+  closest.baseMat.opacity = 1.0; // fully opaque when salvaged
   closest.baseMat.needsUpdate = true;
+
+  // Physical "pop" animation toward camera
+  const targetZ = closest.mesh.position.z + 2.0;
+  const startZ = closest.mesh.position.z;
+  const startTime = performance.now();
+  const duration = 400;
+  function popAnim() {
+    const elapsed = performance.now() - startTime;
+    const t = Math.min(1, elapsed / duration);
+    const ease = 1 - Math.pow(1 - t, 3);
+    closest.mesh.position.z = startZ + (targetZ - startZ) * Math.sin(ease * Math.PI);
+    if (t < 1) requestAnimationFrame(popAnim);
+    else closest.mesh.position.z = startZ; // return to layer
+  }
+  popAnim();
+
+  // Golden glow material effect (temporary)
+  const originalColor = closest.baseMat.color ? closest.baseMat.color.clone() : new THREE.Color(1,1,1);
+  closest.baseMat.color = new THREE.Color(1.3, 1.1, 0.7); // gold tint
+  setTimeout(() => {
+    closest.baseMat.color = originalColor;
+  }, 600);
+
+  // Show flash text
+  showSalvageFlash();
 
   // Update UI
   updateMetrics();
 
-  // Audio feedback
+  // Chime audio (three notes: success chord)
   if (audioCtx) {
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
-    const g = audioCtx.createGain();
-    g.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-    osc.connect(g);
-    g.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.3);
+    const now = audioCtx.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.08);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0, now + i * 0.08);
+      g.gain.linearRampToValueAtTime(0.2, now + i * 0.08 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.5);
+      osc.connect(g);
+      g.connect(audioCtx.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.6);
+    });
   }
 }
 
@@ -959,20 +1018,14 @@ function animate() {
     );
   }
 
-  // ── Meme fullscreen background ──
-  if (closest && closest.data.imageUrl) {
-    if (state.activeMeme !== closest.data) {
-      const cur = bgActiveIsFirst ? memeBgEl2 : memeBgEl;
-      const next = bgActiveIsFirst ? memeBgEl : memeBgEl2;
-      cur.classList.remove('active');
-      next.style.backgroundImage = `url(${closest.data.imageUrl})`;
-      void next.offsetWidth;
-      next.classList.add('active');
-      bgActiveIsFirst = !bgActiveIsFirst;
-    }
-  } else {
-    memeBgEl.classList.remove('active');
-    memeBgEl2.classList.remove('active');
+  // ── Meme fullscreen background — DISABLED (distracting, obstructs strata view)
+  // Strata color already encodes meme DNA; no need for full-bleed blur
+  // Keep the activeMeme state tracking without DOM manipulation:
+  if (closest && state.activeMeme !== closest.data) {
+    state.activeMeme = closest.data;
+    // No background image crossfade
+  } else if (!closest && state.activeMeme !== null) {
+    state.activeMeme = null;
   }
 
   // ── Update active meme display ──

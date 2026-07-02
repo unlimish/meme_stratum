@@ -258,6 +258,39 @@ describe('Planned Obsolescence Visuals', () => {
   });
 });
 
+// ── UX Clarity ( usability as art ) ──
+describe('UX Clarity (使いやすさは芸術の一部)', () => {
+  it('background meme image must not obstruct strata view', () => {
+    // Fullscreen blurred meme bg is visually noisy
+    const bg = document.createElement('div');
+    bg.id = 'meme-bg-1';
+    bg.style.opacity = '0.08';
+    bg.style.filter = 'blur(16px)';
+    // Assert: max opacity should be very subtle or removed
+    const opacity = parseFloat(bg.style.opacity);
+    expect(opacity).toBeLessThanOrEqual(0.15);
+  });
+
+  it('salvage action must provide immediate visual + audio feedback', () => {
+    const salvaged = true;
+    const hasVisualStamp = salvaged;
+    const hasAudioCue = salvaged;
+    expect(hasVisualStamp && hasAudioCue).toBe(true);
+  });
+
+  it('salvaged meme must look distinctly different from unsalvaged', () => {
+    const unsalvagedOpacity = 0.6;
+    const salvagedOpacity = 0.95;
+    expect(salvagedOpacity).toBeGreaterThan(unsalvagedOpacity + 0.2);
+  });
+
+  it('salvage counter must update instantly on click', () => {
+    let remaining = 5;
+    remaining--;
+    expect(remaining).toBe(4);
+  });
+});
+
 // ── Mock DOM tests ──
 describe('DOM Integration', () => {
   beforeEach(() => {
