@@ -935,8 +935,9 @@ function animate() {
     -STRATA_Z_OFFSET
   );
 
-  const year = Math.round(START_YEAR + (state.currentY / K_Y) * (TOTAL_YEARS / (state.timeRange.max / K_Y)));
-  const cYear = Math.max(START_YEAR, Math.min(CURRENT_YEAR, START_YEAR + Math.floor(state.currentY / K_Y)));
+  // Find which stratum (year) the camera is currently inside
+  const currentStratum = strataMeshes.find(s => state.currentY >= s.yStart && state.currentY <= s.yEnd);
+  const cYear = currentStratum ? currentStratum.year : START_YEAR;
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
