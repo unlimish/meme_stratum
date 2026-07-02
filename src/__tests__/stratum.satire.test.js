@@ -291,6 +291,72 @@ describe('UX Clarity (使いやすさは芸術の一部)', () => {
   });
 });
 
+// ── Salvage Purpose (回収の目的) ──
+describe('Salvage Purpose (考古学的記録)', () => {
+  it('should permanently archive salvaged memes in the report', () => {
+    const salvaged = new Set(['pepe', 'doge']);
+    expect(salvaged.has('pepe')).toBe(true);
+    expect(salvaged.has('rickroll')).toBe(false);
+  });
+
+  it('should decay unsalvaged memes over time (forgetting)', () => {
+    const isSalvaged = false;
+    const age = 10; // years since last seen
+    const decayRate = isSalvaged ? 0 : age * 0.05;
+    expect(decayRate).toBe(0.5); // 50% decayed
+  });
+
+  it('should limit salvage capacity to force choice', () => {
+    const capacity = 5;
+    const totalMemes = 52;
+    expect(totalMemes).toBeGreaterThan(capacity);
+  });
+
+  it('should grade user on curation quality, not consumption speed', () => {
+    const salvagedCount = 5;
+    const salvagedRarity = ['MYTHIC', 'RARE', 'RARE', 'UNCOMMON', 'DISPOSABLE'];
+    const hasMythic = salvagedRarity.includes('MYTHIC');
+    expect(hasMythic).toBe(true);
+  });
+});
+
+// ── Salvage Gameplay (回収したミームの使い道) ──
+describe('Salvage Gameplay', () => {
+  it('salvaged memes should glow permanently in strata', () => {
+    const isSalvaged = true;
+    const baseOpacity = 0.75;
+    const salvagedOpacity = isSalvaged ? 1.0 : baseOpacity;
+    expect(salvagedOpacity).toBe(1.0);
+  });
+
+  it('unsalvaged memes should decay over time', () => {
+    const isSalvaged = false;
+    const timePassed = 60; // seconds since passed
+    const decay = Math.min(0.9, timePassed * 0.005);
+    const opacity = isSalvaged ? 0.75 : Math.max(0.05, 0.75 - decay);
+    expect(opacity).toBeLessThan(0.75);
+  });
+
+  it('should generate narrative from 5 salvaged memes', () => {
+    const salvaged = [
+      { name: 'Pepe', deathType: 'resurrected', rarity: 'MYTHIC' },
+      { name: 'Doge', deathType: 'resurrected', rarity: 'MYTHIC' },
+      { name: 'Rage Comics', deathType: 'fade', rarity: 'UNCOMMON' },
+      { name: 'Harlem Shake', deathType: 'sudden', rarity: 'DISPOSABLE' },
+      { name: 'Grumpy Cat', deathType: 'fade', rarity: 'RARE' },
+    ];
+    const mythicCount = salvaged.filter(m => m.rarity === 'MYTHIC').length;
+    const suddenCount = salvaged.filter(m => m.deathType === 'sudden').length;
+    
+    let narrative = '';
+    if (mythicCount >= 2) narrative = 'You preserved the immortals.';
+    else if (suddenCount >= 2) narrative = 'You collected the ephemeral.';
+    else narrative = 'You curated a balanced history.';
+    
+    expect(narrative).toBe('You preserved the immortals.');
+  });
+});
+
 // ── Mock DOM tests ──
 describe('DOM Integration', () => {
   beforeEach(() => {

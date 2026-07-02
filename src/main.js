@@ -968,19 +968,28 @@ function animate() {
     }
   }
 
-  // ── Highlight active panel ──
+  // ── Highlight active panel + salvage/decay mechanics ──
   for (const p of memePanels) {
     const isActive = closest && p === closest;
     const inRange = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2) < K_Y * 1.5;
+    const isSalvaged = state.salvagedMemes.has(p.data.id);
     // Contemporaries hover overrides normal opacity
     if (p.baseMat.userData.hoverTarget !== null && p.baseMat.userData.hoverTarget !== undefined) {
       p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, p.baseMat.userData.hoverTarget, 0.15);
+    } else if (isSalvaged) {
+      // Salvaged: permanent golden glow, immune to decay
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, 1.0, 0.03);
+      // Subtle pulse for "immortal" status
+      const pulse = 0.98 + Math.sin(t * 1.5) * 0.02;
+      p.mesh.scale.setScalar(pulse);
     } else {
-      p.baseMat.opacity = THREE.MathUtils.lerp(
-        p.baseMat.opacity,
-        isActive ? 1.0 : (inRange ? 0.7 : 0.12),
-        0.06
-      );
+      // Unsalvaged: gradual decay (fade to geological noise)
+      const ageInView = (performance.now() - (p.baseMat.userData.lastSeen || performance.now())) / 1000;
+      p.baseMat.userData.lastSeen = performance.now();
+      const decay = Math.min(0.6, ageInView * 0.002);
+      const targetOpacity = isActive ? 1.0 : (inRange ? Math.max(0.15, 0.7 - decay) : Math.max(0.04, 0.12 - decay));
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, targetOpacity, 0.04);
+      p.mesh.scale.setScalar(1.0);
     }
   }
 
@@ -1309,13 +1318,32 @@ function showConsumptionReport() {
   const grade = getGrade(Math.floor(state.totalMemesConsumed), state.salvagedMemes.size, fomoCount);
   document.getElementById('report-grade').textContent = grade;
 
+  // Generate narrative from salvaged memes
+  const salvagedList = Array.from(state.salvagedMemes).map(id => memeData.find(m => m.id === id)).filter(Boolean);
+  const mythicCount = salvagedList.filter(m => getRarity(m) === 'MYTHIC').length;
+  const suddenCount = salvagedList.filter(m => m.deathType === 'sudden').length;
+  const resurrectedCount = salvagedList.filter(m => m.deathType === 'resurrected').length;
+
+  let narrative = '';
+  if (state.salvagedMemes.size === 0) {
+    narrative = 'You excavated 26 years of internet strata but preserved nothing. Everything fades.';
+  } else if (mythicCount >= 2) {
+    narrative = 'You preserved the immortals. These memes refused death — and you refused to forget them.';
+  } else if (suddenCount >= 2) {
+    narrative = 'You collected the ephemeral. Ghosts of moments that burned bright and vanished.';
+  } else if (resurrectedCount >= 1) {
+    narrative = 'You recognized what refuses to die. The phoenix memes live in your archive.';
+  } else {
+    narrative = 'You curated a balanced history. Neither spectacle nor eternity — just human memory.';
+  }
+
   const descs = {
-    'CONSCIOUS CONSUMER': 'You carefully examined what you consumed. A rare act of digital mindfulness.',
-    'ATTENTION DEFICIT': 'You scrolled past most of what you encountered. The algorithm won.',
-    'BINGE CONSUMER': 'You consumed everything in your path. Quantity over quality, always.',
-    'CASUAL SCROLLER': 'You dipped in and out. Neither fully present nor fully absent.',
+    'CONSCIOUS CONSUMER': narrative,
+    'ATTENTION DEFICIT': narrative,
+    'BINGE CONSUMER': narrative,
+    'CASUAL SCROLLER': narrative,
   };
-  document.getElementById('report-desc').textContent = descs[grade] || descs['CASUAL SCROLLER'];
+  document.getElementById('report-desc').textContent = descs[grade] || narrative;
 
   // Collection grid
   const grid = document.getElementById('report-collection');
@@ -1328,6 +1356,14 @@ function showConsumptionReport() {
     item.style.backgroundImage = `url(${meme.imageUrl})`;
     item.setAttribute('data-rarity', getRarity(meme));
     grid.appendChild(item);
+  }
+
+  // Forgotten count
+  const forgottenEl = document.getElementById('report-forgotten');
+  if (forgottenEl) {
+    const forgottenCount = memeData.length - state.salvagedMemes.size;
+    forgottenEl.querySelector('.forgotten-count').textContent =
+      `${forgottenCount} fossil${forgottenCount !== 1 ? 's' : ''} were left to decay`;
   }
 
   reportPanel.classList.remove('hidden');
