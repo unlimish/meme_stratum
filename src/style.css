@@ -364,7 +364,7 @@ body, html {
 /* ── Salvage Button ── */
 #salvage-btn {
   position: fixed;
-  top: 740px;
+  bottom: 240px; /* fixed gap above meme-info (bottom:40px + ~180px content) */
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
