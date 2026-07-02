@@ -90,7 +90,7 @@ const timelineRuler = document.getElementById('timeline-ruler');
 const metricsPanel = document.getElementById('metrics-panel');
 const velocityEl = document.getElementById('consumption-velocity');
 const velocityFill = document.getElementById('velocity-fill');
-const depthEl = document.getElementById('landfill-depth');
+// depthEl removed — landfill depth metric deleted
 const salvageCapEl = document.getElementById('salvage-capacity');
 const warningEl = document.querySelector('#metrics-panel .warning');
 const salvageBtn = document.getElementById('salvage-btn');
@@ -611,7 +611,6 @@ function updateMetrics() {
   velocityFill.style.width = velPercent + '%';
   velocityFill.className = 'metric-fill' + (velPercent > 80 ? ' danger' : velPercent > 50 ? ' warn' : '');
 
-  depthEl.textContent = (state.landfillDepth / 10).toFixed(1);
   salvageCapEl.textContent = state.salvageRemaining;
 
   // Consumption limit warning at 90%
