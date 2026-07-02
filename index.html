@@ -25,6 +25,7 @@
         <div class="overlay-desc">
           <span>Scroll to excavate 26 years of internet culture</span>
           <span class="jp">スクロールで26年のインターネット文化を発掘する</span>
+          <span class="jp warn">速く掘れば掘るほど、あなたは多くのゴミを生み出す</span>
         </div>
         <button id="connect-btn">ENTER</button>
         <div class="overlay-serial">
@@ -41,13 +42,41 @@
       <div class="hud-era" id="era-label"></div>
     </div>
 
+    <!-- Consumption Metrics (satirical) -->
+    <div id="metrics-panel" class="hidden">
+      <div class="metric">
+        <div class="metric-label">CONSUMPTION VELOCITY</div>
+        <div class="metric-value" id="consumption-velocity">0.0</div>
+        <div class="metric-unit">memes/sec</div>
+        <div class="metric-bar"><div class="metric-fill" id="velocity-fill"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">LANDFILL DEPTH</div>
+        <div class="metric-value" id="landfill-depth">0.0</div>
+        <div class="metric-unit">meters</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">SALVAGE CAPACITY</div>
+        <div class="metric-value" id="salvage-capacity">5</div>
+        <div class="metric-unit">remaining</div>
+      </div>
+      <div class="metric warning" id="consumption-warning">
+        <div class="metric-label">⚠ CONSUMPTION LIMIT APPROACHING</div>
+      </div>
+    </div>
+
     <!-- Active Meme Info (bottom) -->
     <div id="meme-info" class="hidden">
       <div class="meme-info-inner">
         <div class="meme-info-name" id="active-meme">— —</div>
         <div class="meme-info-years" id="active-duration"></div>
+        <div class="meme-info-salvage" id="active-salvage"></div>
+        <div class="meme-info-desc" id="active-description"></div>
       </div>
     </div>
+
+    <!-- Salvage Button (appears when meme active) -->
+    <div id="salvage-btn" class="hidden">CLICK TO SALVAGE</div>
 
     <!-- Serial status -->
     <div id="serial-indicator" class="hidden">

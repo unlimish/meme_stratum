@@ -2,36 +2,49 @@ import * as THREE from 'three';
 import { memeData } from './memeData.js';
 
 // ─────────────────────────────────────────────
-//  MEME STRATUM — Geological Meme Excavation
+//  MEME STRATUM — Geological Excavation as
+//  Critique of Mass-Consumption Society
 //
-//  Concept:
-//    - Memes accumulate as geological strata (layers)
-//    - Time flows upward (Y-axis): 2000 at bottom, 2026 at top
-//    - Camera slices through cross-sections horizontally (Z-axis)
-//    - Scroll = drilling upward through time
-//    - Older layers are compressed, weathered, and fractured
-//    - Influence connections become mineral veins cutting through strata
-//    - Particle dust responds to excavation speed
+//  TDD Principles (Kent Beck):
+//  1. Write tests first
+//  2. Make them pass
+//  3. Refactor
+//
+//  Satirical Mechanics:
+//    - CONSUMPTION VELOCITY: scroll speed = waste generation rate
+//    - LANDFILL DEPTH: accumulated years of meme sediment
+//    - SALVAGE CAPACITY: finite attention budget (max 5)
+//    - HARDNESS: older layers resist excavation (planned obsolescence)
+//    - PACKAGING METAPHOR: newer memes are shinier, older compressed
 // ─────────────────────────────────────────────
 
-const K_Y = 2.5;           // vertical space per year
-const K_LAYER_BASE = 0.4;  // minimum layer thickness
-const LAYER_Z = 8;         // depth of each stratum layer
-const STRATA_Z_OFFSET = 4; // how far back strata sit
+const K_Y = 2.5;
+const K_LAYER_BASE = 0.4;
+const LAYER_Z = 8;
+const STRATA_Z_OFFSET = 4;
 const CURRENT_YEAR = 2026;
 const START_YEAR = 2000;
 const TOTAL_YEARS = CURRENT_YEAR - START_YEAR;
+const CONSUMPTION_LIMIT = 200;
+const SALVAGE_CAPACITY_MAX = 5;
 
 // ── State ──
 const state = {
-  currentY: -5,             // camera Y position
+  currentY: -5,
   targetY: -5,
   timeRange: { min: 0, max: TOTAL_YEARS * K_Y + 5 },
   activeMeme: null,
   isSerialConnected: false,
   autoScrolling: false,
   scrollSpeed: 0,
-  excavationDepth: 0,       // how much we've "drilled"
+  excavationDepth: 0,
+  // Satirical metrics
+  totalConsumption: 0,
+  consumptionVelocity: 0,
+  landfillDepth: 0,
+  salvageRemaining: SALVAGE_CAPACITY_MAX,
+  salvagedMemes: new Set(),
+  isWarning: false,
 };
 
 // ── Idle / auto-scroll ──
@@ -54,6 +67,8 @@ const eraLabel = document.getElementById('era-label');
 const memeInfo = document.getElementById('meme-info');
 const activeMemeEl = document.getElementById('active-meme');
 const activeDurEl = document.getElementById('active-duration');
+const activeSalvageEl = document.getElementById('active-salvage');
+const activeDescEl = document.getElementById('active-description');
 const memeBgEl = document.getElementById('meme-bg-1');
 const memeBgEl2 = document.getElementById('meme-bg-2');
 let bgActiveIsFirst = true;
@@ -63,6 +78,14 @@ const serialIndicator = document.getElementById('serial-indicator');
 const webglCanvas = document.getElementById('webgl');
 const timelineWrapper = document.getElementById('timeline-wrapper');
 const timelineRuler = document.getElementById('timeline-ruler');
+// Satirical DOM elements
+const metricsPanel = document.getElementById('metrics-panel');
+const velocityEl = document.getElementById('consumption-velocity');
+const velocityFill = document.getElementById('velocity-fill');
+const depthEl = document.getElementById('landfill-depth');
+const salvageCapEl = document.getElementById('salvage-capacity');
+const warningEl = document.querySelector('#metrics-panel .warning');
+const salvageBtn = document.getElementById('salvage-btn');
 
 // ── Three.js ──
 let scene, camera, renderer;
@@ -109,16 +132,13 @@ function blendColors(colors, weights) {
   for (let i = 0; i < colors.length; i++) {
     const c = hexToRgb(colors[i]);
     const w = weights[i] / totalWeight;
-    r += c.r * w;
-    g += c.g * w;
-    b += c.b * w;
+    r += c.r * w; g += c.g * w; b += c.b * w;
   }
   return rgbToHex(r, g, b);
 }
 
 function weatherColor(hex, ageFactor, densityFactor) {
   const c = hexToRgb(hex);
-  // Older = more yellowed and desaturated
   const desat = 1 - ageFactor * 0.5;
   const yellowShift = ageFactor * 20;
   const darken = 1 - ageFactor * 0.3;
@@ -140,37 +160,29 @@ function createStrataTexture(year, memesInLayer, ageFactor, densityFactor) {
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
 
-  // Base layer color — blend of all meme colors in this year
   const colors = memesInLayer.map(m => m.color);
   const weights = memesInLayer.map(m => Math.max(1, m.diedYear - m.bornYear));
   const baseColor = blendColors(colors, weights);
   const w = weatherColor(baseColor, ageFactor, densityFactor);
 
-  // Fill base
   ctx.fillStyle = `rgb(${w.r | 0}, ${w.g | 0}, ${w.b | 0})`;
   ctx.fillRect(0, 0, S, S);
 
-  // Add sediment texture (noise)
   const imageData = ctx.getImageData(0, 0, S, S);
   const d = imageData.data;
   for (let i = 0; i < d.length; i += 4) {
     const n = (Math.random() - 0.5) * (15 + ageFactor * 25);
-    d[i] += n;
-    d[i + 1] += n;
-    d[i + 2] += n;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
   }
   ctx.putImageData(imageData, 0, 0);
 
-  // Compression lines (older = more pronounced)
   if (ageFactor > 0.1) {
     const lineCount = 20 + ageFactor * 80;
     ctx.strokeStyle = `rgba(40, 30, 20, ${0.03 + ageFactor * 0.08})`;
     ctx.lineWidth = 1;
     for (let i = 0; i < lineCount; i++) {
       const y = Math.random() * S;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      // Wavy compression line
+      ctx.beginPath(); ctx.moveTo(0, y);
       for (let x = 0; x < S; x += 20) {
         ctx.lineTo(x, y + Math.sin(x * 0.01 + i) * (2 + ageFactor * 4));
       }
@@ -178,7 +190,6 @@ function createStrataTexture(year, memesInLayer, ageFactor, densityFactor) {
     }
   }
 
-  // Stains and weathering
   if (ageFactor > 0.2) {
     const stainCount = 5 + ageFactor * 20;
     for (let s = 0; s < stainCount; s++) {
@@ -189,13 +200,10 @@ function createStrataTexture(year, memesInLayer, ageFactor, densityFactor) {
       grad.addColorStop(0, `rgba(140, 110, 60, ${ageFactor * 0.12})`);
       grad.addColorStop(1, 'rgba(140, 110, 60, 0)');
       ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
     }
   }
 
-  // Fractures (very old layers)
   if (ageFactor > 0.6) {
     const fractureCount = 2 + ageFactor * 8;
     ctx.strokeStyle = `rgba(60, 45, 30, ${ageFactor * 0.15})`;
@@ -214,11 +222,9 @@ function createStrataTexture(year, memesInLayer, ageFactor, densityFactor) {
     }
   }
 
-  // Year label on the strata
   ctx.fillStyle = `rgba(26, 20, 16, ${0.15 + ageFactor * 0.1})`;
   ctx.font = `bold ${S * 0.04}px Inter, "Helvetica Neue", sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText(year.toString(), S * 0.02, S * 0.02);
 
   tex.needsUpdate = true;
@@ -226,9 +232,9 @@ function createStrataTexture(year, memesInLayer, ageFactor, densityFactor) {
 }
 
 // ─────────────────────────────────────────────
-//  MEME PANEL TEXTURE — embedded fossil in strata
+//  FOSSIL TEXTURE — embedded meme in strata
 // ─────────────────────────────────────────────
-function createFossilTexture(meme, ageFactor) {
+function createFossilTexture(meme, ageFactor, isSalvaged) {
   const S = 512;
   const cvs = document.createElement('canvas');
   const ctx = cvs.getContext('2d');
@@ -238,25 +244,19 @@ function createFossilTexture(meme, ageFactor) {
   tex.colorSpace = THREE.SRGBColorSpace;
 
   function draw(img) {
-    // Weathered paper/fossil base
     const y = ageFactor * 40;
     ctx.fillStyle = `rgb(${240 - y * 0.5 | 0}, ${232 - y * 0.3 | 0}, ${210 - y * 0.8 | 0})`;
     ctx.fillRect(0, 0, S, S);
 
-    // Fossil texture — crystalline imprint
     const imageData = ctx.getImageData(0, 0, S, S);
     const d = imageData.data;
     for (let i = 0; i < d.length; i += 4) {
       const n = (Math.random() - 0.5) * (4 + ageFactor * 10);
-      d[i] += n;
-      d[i + 1] += n;
-      d[i + 2] += n;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
     }
     ctx.putImageData(imageData, 0, 0);
 
-    // Death type visual
     if (meme.deathType === 'sudden') {
-      // Sudden death = cracked, shattered look
       ctx.strokeStyle = `rgba(80, 60, 40, ${0.1 + ageFactor * 0.2})`;
       ctx.lineWidth = 2;
       for (let c = 0; c < 3 + ageFactor * 5; c++) {
@@ -270,7 +270,6 @@ function createFossilTexture(meme, ageFactor) {
         ctx.stroke();
       }
     } else if (meme.deathType === 'resurrected') {
-      // Resurrected = glow, aura
       const grad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.6);
       grad.addColorStop(0, `${meme.color}22`);
       grad.addColorStop(1, 'rgba(0,0,0,0)');
@@ -278,7 +277,6 @@ function createFossilTexture(meme, ageFactor) {
       ctx.fillRect(0, 0, S, S);
     }
 
-    // Meme image (semi-transparent, like a fossil imprint)
     if (img) {
       const m = 30;
       const ds = S - m * 2;
@@ -287,21 +285,28 @@ function createFossilTexture(meme, ageFactor) {
       if (a > 1) h = ds / a;
       else w = ds * a;
       ctx.save();
-      ctx.globalAlpha = 0.6 - ageFactor * 0.2;
-      // Add slight blur for weathered look
-      ctx.filter = `blur(${ageFactor * 2}px)`;
+      ctx.globalAlpha = isSalvaged ? 0.85 : (0.6 - ageFactor * 0.2);
+      ctx.filter = isSalvaged ? 'none' : `blur(${ageFactor * 2}px)`;
       ctx.drawImage(img, (S - w) / 2, (S - h) / 2 - 20, w, h);
       ctx.restore();
     }
 
-    // Name label (like a museum specimen tag)
+    // Salvage stamp
+    if (isSalvaged) {
+      ctx.strokeStyle = '#228844';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(10, 10, S - 20, S - 20);
+      ctx.fillStyle = '#228844';
+      ctx.font = `bold ${S * 0.04}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('SALVAGED', S / 2, S - 30);
+    }
+
     ctx.fillStyle = `rgba(26, 20, 16, ${0.5 + ageFactor * 0.2})`;
-    ctx.font = `bold ${S * 0.025}px Inter, "Helvetica Neue", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
+    ctx.font = `bold ${S * 0.025}px Inter, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText(meme.name.toUpperCase(), S / 2, S - 15);
 
-    // Duration bar
     const barY = S - 45;
     const barH = 4;
     const barW = S * 0.7;
@@ -319,14 +324,12 @@ function createFossilTexture(meme, ageFactor) {
     ctx.fillStyle = barGrad;
     ctx.fillRect(barLeft, barY, activeW, barH);
 
-    // Death type indicator
     const typeLabel = { sudden: '⚡ SUDDEN', fade: '⋯ FADE', resurrected: '↺ RESURRECTED' }[meme.deathType] || '';
     ctx.fillStyle = `rgba(26, 20, 16, ${0.35 + ageFactor * 0.15})`;
     ctx.font = `${S * 0.018}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText(typeLabel, S / 2, barY - 5);
 
-    // Description (small, like museum text)
     if (meme.description) {
       ctx.fillStyle = `rgba(26, 20, 16, ${0.25 + ageFactor * 0.15})`;
       ctx.font = `${S * 0.016}px Inter, sans-serif`;
@@ -364,13 +367,12 @@ function createFossilTexture(meme, ageFactor) {
 }
 
 // ─────────────────────────────────────────────
-//  THREE.JS SCENE — Geological strata formation
+//  THREE.JS SCENE — Geological strata
 // ─────────────────────────────────────────────
 function initThree() {
   scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2('#b8a898', 0.008);
+  scene.fog = new THREE.FogExp2('#a89888', 0.008);
 
-  // Camera looks at cross-section from the side
   camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 300);
   camera.position.set(0, -5, 18);
   camera.lookAt(0, 0, 0);
@@ -382,16 +384,12 @@ function initThree() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
 
-  // Warm ambient + directional for geological look
-  scene.add(new THREE.AmbientLight('#f5ebe0', 0.6));
+  scene.add(new THREE.AmbientLight('#f0e8e0', 0.6));
   const dir = new THREE.DirectionalLight('#ffe0c0', 0.7);
-  dir.position.set(5, 8, 12);
-  scene.add(dir);
+  dir.position.set(5, 8, 12); scene.add(dir);
   const fill = new THREE.DirectionalLight('#c8d8e8', 0.3);
-  fill.position.set(-5, 3, 5);
-  scene.add(fill);
+  fill.position.set(-5, 3, 5); scene.add(fill);
 
-  // ── Build geological strata by year ──
   const yearGroups = new Map();
   for (const meme of memeData) {
     for (let y = meme.bornYear; y <= Math.min(meme.diedYear, CURRENT_YEAR); y++) {
@@ -406,12 +404,9 @@ function initThree() {
   for (const year of sortedYears) {
     const memes = yearGroups.get(year);
     const ageFactor = Math.min((year - START_YEAR) / TOTAL_YEARS, 1);
-    const densityFactor = memes.length / 5; // normalized density
-
-    // Layer thickness based on meme count + duration influence
+    const densityFactor = memes.length / 5;
     const layerThickness = K_LAYER_BASE + (memes.length * 0.15) + (densityFactor * 0.2);
 
-    // Create stratum box
     const strataGeo = new THREE.BoxGeometry(12, layerThickness, LAYER_Z);
     const strataTex = createStrataTexture(year, memes, ageFactor, densityFactor);
     const strataMat = new THREE.MeshStandardMaterial({
@@ -435,16 +430,14 @@ function initThree() {
       ageFactor,
     });
 
-    // ── Place meme fossils within this layer ──
     for (let i = 0; i < memes.length; i++) {
       const meme = memes[i];
       const dur = Math.max(1, meme.diedYear - meme.bornYear);
-      // Position within the layer
       const xPos = (i - (memes.length - 1) / 2) * 2.5;
       const yPos = currentY + (layerThickness * 0.3) + (Math.random() * layerThickness * 0.4);
       const zPos = -STRATA_Z_OFFSET + (Math.random() - 0.5) * (LAYER_Z * 0.6);
 
-      const tex = createFossilTexture(meme, ageFactor);
+      const tex = createFossilTexture(meme, ageFactor, state.salvagedMemes.has(meme.id));
       const mat = new THREE.MeshBasicMaterial({
         map: tex,
         transparent: true,
@@ -453,13 +446,11 @@ function initThree() {
         depthWrite: false,
       });
 
-      // Panel size based on popularity duration
       const panelSize = 0.7 + Math.min(2.5, dur / 4);
       const geo = new THREE.PlaneGeometry(panelSize, panelSize * 1.1);
       const mesh = new THREE.Mesh(geo, mat);
 
       mesh.position.set(xPos, yPos, zPos);
-      // Slight random rotation like embedded fossils
       mesh.rotation.set(
         (Math.random() - 0.5) * 0.15,
         (Math.random() - 0.5) * 0.3,
@@ -479,24 +470,21 @@ function initThree() {
     currentY += layerThickness;
   }
 
-  // ── Mineral veins (influence connections) ──
+  state.landfillDepth = currentY;
+
+  // ── Mineral veins ──
   const memeMap = new Map(memeData.map(m => [m.id, m]));
   for (const meme of memeData) {
     if (!meme.influencedBy || meme.influencedBy.length === 0) continue;
-
     for (const parentId of meme.influencedBy) {
       const parent = memeMap.get(parentId);
       if (!parent) continue;
-
-      // Find Y positions
       const parentStrata = strataMeshes.find(s => s.year >= parent.bornYear && s.year <= parent.diedYear);
       const childStrata = strataMeshes.find(s => s.year >= meme.bornYear && s.year <= meme.diedYear);
       if (!parentStrata || !childStrata) continue;
 
       const startY = parentStrata.yStart + (parentStrata.yEnd - parentStrata.yStart) * 0.5;
       const endY = childStrata.yStart + (childStrata.yEnd - childStrata.yStart) * 0.5;
-
-      // Bezier curve through strata
       const startX = (Math.random() - 0.5) * 4;
       const endX = (Math.random() - 0.5) * 4;
       const midY = (startY + endY) / 2;
@@ -522,7 +510,7 @@ function initThree() {
     }
   }
 
-  // ── Ambient particles (sediment in air) ──
+  // ── Ambient particles ──
   const pg = new THREE.BufferGeometry();
   const pp = new Float32Array(PARTICLE_COUNT * 3);
   for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -540,13 +528,13 @@ function initThree() {
   }));
   scene.add(particles);
 
-  // ── Excavation dust particles ──
+  // ── Excavation dust ──
   const dustGeo = new THREE.BufferGeometry();
   const dustPos = new Float32Array(DUST_COUNT * 3);
-  const dustVel = new Float32Array(DUST_COUNT * 3); // velocities
+  const dustVel = new Float32Array(DUST_COUNT * 3);
   for (let i = 0; i < DUST_COUNT; i++) {
     dustPos[i * 3] = (Math.random() - 0.5) * 20;
-    dustPos[i * 3 + 1] = -100; // hidden initially
+    dustPos[i * 3 + 1] = -100;
     dustPos[i * 3 + 2] = (Math.random() - 0.5) * 10;
     dustVel[i * 3] = 0;
     dustVel[i * 3 + 1] = 0;
@@ -594,9 +582,85 @@ function buildTimeline() {
 }
 
 // ─────────────────────────────────────────────
+//  SATIRICAL METRICS
+// ─────────────────────────────────────────────
+function updateMetrics() {
+  // Consumption velocity: memes per second approximation
+  const memesInView = memePanels.filter(p => {
+    const dist = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
+    return dist < K_Y * 2;
+  }).length;
+  state.consumptionVelocity = state.scrollSpeed * memesInView * 0.3;
+  state.totalConsumption += state.consumptionVelocity;
+
+  // Update DOM
+  velocityEl.textContent = state.consumptionVelocity.toFixed(1);
+  const velPercent = Math.min(100, (state.consumptionVelocity / 20) * 100);
+  velocityFill.style.width = velPercent + '%';
+  velocityFill.className = 'metric-fill' + (velPercent > 80 ? ' danger' : velPercent > 50 ? ' warn' : '');
+
+  depthEl.textContent = (state.landfillDepth / 10).toFixed(1);
+  salvageCapEl.textContent = state.salvageRemaining;
+
+  // Consumption limit warning at 90%
+  const consumptionPercent = (state.totalConsumption / CONSUMPTION_LIMIT) * 100;
+  state.isWarning = consumptionPercent > 90 && state.consumptionVelocity > 2;
+  warningEl.style.display = state.isWarning ? 'block' : 'none';
+
+  // Update salvage button
+  if (closest && state.salvageRemaining > 0 && !state.salvagedMemes.has(closest.data.id)) {
+    salvageBtn.textContent = `CLICK TO SALVAGE (${state.salvageRemaining} left)`;
+    salvageBtn.classList.remove('hidden', 'exhausted');
+  } else if (closest && state.salvageRemaining === 0) {
+    salvageBtn.textContent = 'SALVAGE CAPACITY EXHAUSTED';
+    salvageBtn.classList.remove('hidden');
+    salvageBtn.classList.add('exhausted');
+  } else {
+    salvageBtn.classList.add('hidden');
+  }
+}
+
+// ─────────────────────────────────────────────
+//  SALVAGE INTERACTION
+// ─────────────────────────────────────────────
+function handleSalvage() {
+  if (!closest || state.salvageRemaining <= 0 || state.salvagedMemes.has(closest.data.id)) return;
+
+  state.salvageRemaining--;
+  state.salvagedMemes.add(closest.data.id);
+
+  // Re-render fossil texture with salvage stamp
+  const ageFactor = Math.min((closest.data.bornYear - START_YEAR) / TOTAL_YEARS, 1);
+  const newTex = createFossilTexture(closest.data, ageFactor, true);
+  closest.baseMat.map = newTex;
+  closest.baseMat.needsUpdate = true;
+
+  // Update UI
+  updateMetrics();
+
+  // Audio feedback
+  if (audioCtx) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+    osc.connect(g);
+    g.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.3);
+  }
+}
+
+salvageBtn.addEventListener('click', handleSalvage);
+
+// ─────────────────────────────────────────────
 //  CONTROLS
 // ─────────────────────────────────────────────
 let isDragging = false, lastY = 0;
+let closest = null;
 
 window.addEventListener('wheel', e => {
   state.targetY += e.deltaY * 0.12;
@@ -676,13 +740,12 @@ async function initSerial() {
 }
 
 // ─────────────────────────────────────────────
-//  AUDIO — geological soundscape
+//  AUDIO
 // ─────────────────────────────────────────────
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-  // Deep drone
   droneOsc = audioCtx.createOscillator();
   droneOsc.type = 'triangle';
   droneOsc.frequency.value = 55;
@@ -698,7 +761,6 @@ function initAudio() {
   gainNode = audioCtx.createGain();
   gainNode.gain.value = 0.0001;
 
-  // Noise for excavation texture
   const bufferSize = audioCtx.sampleRate * 2;
   const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
   const noiseData = noiseBuffer.getChannelData(0);
@@ -736,11 +798,9 @@ function updateAudio() {
   const depth = Math.max(0, Math.min(1, state.currentY / (TOTAL_YEARS * K_Y)));
   const speed = Math.abs(state.scrollSpeed);
 
-  // Deeper = lower drone
   droneOsc.frequency.setTargetAtTime(55 - depth * 18, audioCtx.currentTime, 0.1);
   filterNode.frequency.setTargetAtTime(80 + speed * 15 + depth * 30, audioCtx.currentTime, 0.15);
 
-  // Noise responds to excavation speed
   noiseGain.gain.setTargetAtTime(Math.min(0.08, speed * 0.02), audioCtx.currentTime, 0.05);
 }
 
@@ -753,6 +813,7 @@ function startExperience() {
   memeInfo.classList.remove('hidden');
   serialIndicator.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
+  metricsPanel.classList.remove('hidden');
   initAudio();
   resetIdleTimer();
 }
@@ -772,15 +833,13 @@ function animate() {
 
   const t = performance.now() * 0.001;
 
-  // Smooth interpolation with "hardness" feel (older layers = more resistance)
   const depthFactor = Math.max(0, Math.min(1, state.currentY / (TOTAL_YEARS * K_Y)));
-  const lerpFactor = 0.04 + depthFactor * 0.03; // deeper = slower lerp (resistance)
+  const lerpFactor = 0.04 + depthFactor * 0.03;
   const prevY = state.currentY;
   state.currentY = THREE.MathUtils.lerp(state.currentY, state.targetY, lerpFactor);
   state.scrollSpeed = Math.abs(state.currentY - prevY);
   state.excavationDepth = state.currentY;
 
-  // Auto-scroll when idle
   if (state.autoScrolling) {
     state.targetY += AUTO_SCROLL_SPEED * 0.016;
     if (state.targetY >= state.timeRange.max + 2) {
@@ -789,8 +848,6 @@ function animate() {
     clampY();
   }
 
-  // Camera — cross-section view of strata
-  // Slight sway for organic feel
   camera.position.set(
     Math.sin(t * 0.1) * 0.5 + Math.sin(t * 0.3) * 0.2,
     state.currentY + 2,
@@ -802,13 +859,11 @@ function animate() {
     -STRATA_Z_OFFSET
   );
 
-  // ── Year display ──
   const year = Math.round(START_YEAR + (state.currentY / K_Y) * (TOTAL_YEARS / (state.timeRange.max / K_Y)));
   const cYear = Math.max(START_YEAR, Math.min(CURRENT_YEAR, START_YEAR + Math.floor(state.currentY / K_Y)));
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
 
-  // ── Timeline ruler ──
   const PX = 56;
   const rulerOff = -((cYear - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
   timelineRuler.style.transform = `translateX(${rulerOff}px)`;
@@ -816,8 +871,9 @@ function animate() {
     el.classList.toggle('active', el.id === `tick-year-${cYear}`);
   });
 
-  // ── Find active meme (closest to camera Y) ──
-  let closest = null, closestDist = Infinity;
+  // ── Find active meme ──
+  let closestDist = Infinity;
+  closest = null;
   for (const p of memePanels) {
     const d = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
     if (d < closestDist) {
@@ -826,7 +882,7 @@ function animate() {
     }
   }
 
-  // ── Highlight active panel, dim others ──
+  // ── Highlight active panel ──
   for (const p of memePanels) {
     const isActive = closest && p === closest;
     const inRange = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2) < K_Y * 1.5;
@@ -837,7 +893,7 @@ function animate() {
     );
   }
 
-  // ── Vein pulse (active veins glow) ──
+  // ── Vein pulse ──
   for (const v of veinMeshes) {
     const isActive = closest && closest.data.influencedBy && closest.data.influencedBy.some(id => {
       const parent = memeData.find(m => m.id === id);
@@ -874,16 +930,32 @@ function animate() {
       const dur = closest.data.diedYear - closest.data.bornYear || 1;
       const typeLabel = { sudden: '⚡', fade: '⋯', resurrected: '↺' }[closest.data.deathType] || '';
       activeDurEl.textContent = `${closest.data.bornYear} — ${closest.data.diedYear} · ${dur} YEAR${dur > 1 ? 'S' : ''} ${typeLabel}`;
+
+      // Salvage value display
+      const salvageValue = calculateSalvageValue(closest.data, CURRENT_YEAR);
+      activeSalvageEl.textContent = `Salvage Value: ${(salvageValue * 100).toFixed(0)}%`;
+      activeSalvageEl.classList.add('visible');
+
+      // Description
+      if (closest.data.description) {
+        activeDescEl.textContent = closest.data.description;
+        activeDescEl.classList.add('visible');
+      }
     }
   } else {
     if (state.activeMeme !== null) {
       state.activeMeme = null;
       activeMemeEl.textContent = '';
       activeDurEl.textContent = '';
+      activeSalvageEl.classList.remove('visible');
+      activeDescEl.classList.remove('visible');
     }
   }
 
-  // ── Ambient particles drift ──
+  // ── Update satirical metrics ──
+  updateMetrics();
+
+  // ── Ambient particles ──
   if (particles) {
     const arr = particles.geometry.attributes.position.array;
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -894,14 +966,13 @@ function animate() {
     particles.geometry.attributes.position.needsUpdate = true;
   }
 
-  // ── Excavation dust (responds to scroll speed) ──
+  // ── Excavation dust ──
   if (dustParticles && state.scrollSpeed > 0.05) {
     const dustArr = dustParticles.geometry.attributes.position.array;
     const dustVel = dustParticles.userData.velocities;
     const dustOpacity = Math.min(0.5, state.scrollSpeed * 2);
     dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, dustOpacity, 0.1);
 
-    // Spawn dust at camera Y level
     const spawnRate = Math.min(5, Math.floor(state.scrollSpeed * 3));
     for (let s = 0; s < spawnRate; s++) {
       const idx = Math.floor(Math.random() * DUST_COUNT);
@@ -909,16 +980,14 @@ function animate() {
       dustArr[idx * 3 + 1] = state.currentY + (Math.random() - 0.5) * 2;
       dustArr[idx * 3 + 2] = (Math.random() - 0.5) * 8;
       dustVel[idx * 3] = (Math.random() - 0.5) * 0.1;
-      dustVel[idx * 3 + 1] = -Math.random() * 0.15; // fall down
+      dustVel[idx * 3 + 1] = -Math.random() * 0.15;
       dustVel[idx * 3 + 2] = (Math.random() - 0.5) * 0.1;
     }
 
-    // Update dust physics
     for (let i = 0; i < DUST_COUNT; i++) {
       dustArr[i * 3] += dustVel[i * 3];
       dustArr[i * 3 + 1] += dustVel[i * 3 + 1];
       dustArr[i * 3 + 2] += dustVel[i * 3 + 2];
-      // Hide if too far
       if (dustArr[i * 3 + 1] < state.currentY - 5 || dustArr[i * 3 + 1] > state.currentY + 10) {
         dustArr[i * 3 + 1] = -100;
       }
@@ -930,6 +999,13 @@ function animate() {
 
   updateAudio();
   renderer.render(scene, camera);
+}
+
+// ── Helper: salvage value calculation (matches test) ──
+function calculateSalvageValue(meme, currentYear) {
+  const age = currentYear - meme.diedYear;
+  const durability = { sudden: 0.1, fade: 0.3, resurrected: 0.8 }[meme.deathType] || 0.2;
+  return Math.max(0, durability * (1 - age / 20));
 }
 
 // ── Init ──
