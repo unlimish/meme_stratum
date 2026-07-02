@@ -253,18 +253,69 @@ body.cursor-hidden, body.cursor-hidden * {
   border-left: 3px solid var(--fg-dim);
   min-width: 160px;
 }
-.metric.warning {
-  border-left-color: var(--warn);
-  animation: warningPulse 1.5s ease-in-out infinite;
-}
-.metric.warning .metric-label {
-  color: var(--warn);
-  font-weight: 600;
-}
-
 @keyframes warningPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+/* ── Visitor identity card (top-left) ── */
+#visitor-card .metric-value {
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+}
+
+.visitor-scorerow {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  margin-top: 6px;
+}
+
+.visitor-score {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: rgba(255, 250, 240, 0.9);
+}
+
+.visitor-rank {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: #ffcc66;
+}
+
+/* ── Ambient consumption meter (top-right, mirrors the identity card) ── */
+#ambient-metrics {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(26, 20, 16, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 10px 16px;
+  border-radius: 4px;
+  border-left: 3px solid var(--fg-dim);
+  min-width: 170px;
+  transition: opacity 0.8s;
+}
+#ambient-metrics.hidden { opacity: 0; }
+
+.velocity-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+#ambient-metrics .warning {
+  display: none;
+  margin-top: 6px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--warn);
+  animation: warningPulse 1.5s ease-in-out infinite;
 }
 
 .metric-label {
@@ -344,10 +395,10 @@ body.cursor-hidden, body.cursor-hidden * {
   transition: opacity 0.4s, background 0.4s;
 }
 
-/* ── Active Meme Info (flexbox column with salvage above) ── */
+/* ── Active Meme Info (bottom stack, above the timeline ruler) ── */
 #meme-info {
   position: fixed;
-  bottom: 40px;
+  bottom: 76px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
@@ -356,7 +407,7 @@ body.cursor-hidden, body.cursor-hidden * {
   align-items: center;
   gap: 12px;
   transition: opacity 0.5s;
-  max-width: 600px;
+  max-width: 640px;
   width: 90%;
   pointer-events: none;
 }
@@ -364,6 +415,14 @@ body.cursor-hidden, body.cursor-hidden * {
 
 .meme-info-inner {
   text-align: center;
+}
+
+/* Name + compact salvage pill share one row so nothing covers the era label */
+.meme-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
 }
 
 .meme-info-name {
@@ -420,45 +479,49 @@ body.cursor-hidden, body.cursor-hidden * {
   opacity: 1;
 }
 
-/* ── Salvage Button (inside flexbox column, no fixed positioning) ── */
+/* ── Salvage Pill (compact, sits beside the meme name) ── */
 #salvage-btn {
-  background: var(--salvage);
-  color: white;
+  background: rgba(51, 170, 102, 0.14);
+  border: 1px solid var(--salvage);
+  color: var(--salvage);
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-  padding: 12px 32px;
-  border-radius: 4px;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  padding: 7px 16px;
+  border-radius: 999px;
   cursor: pointer;
   pointer-events: auto;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 20px rgba(34, 136, 68, 0.3);
-  order: -1; /* flexbox: place above meme-info-inner */
+  white-space: nowrap;
   flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #salvage-btn:hover {
-  background: #1a6633;
-  transform: scale(1.05);
-  box-shadow: 0 6px 30px rgba(34, 136, 68, 0.4);
+  background: var(--salvage);
+  color: #fff;
+  transform: scale(1.06);
+  box-shadow: 0 4px 20px rgba(34, 136, 68, 0.4);
 }
 #salvage-btn.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(10px);
+  transform: translateY(6px);
 }
 #salvage-btn.exhausted {
-  background: var(--danger);
-  box-shadow: 0 4px 20px rgba(170, 17, 17, 0.3);
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(170, 17, 17, 0.12);
 }
 #salvage-btn.exhausted:hover {
-  background: #881111;
+  background: var(--danger);
+  color: #fff;
+  box-shadow: none;
 }
 
-/* ── Serial Indicator ── */
+/* ── Serial Indicator (bottom-right, above the auto-excavation chip) ── */
 #serial-indicator {
   position: fixed;
-  top: 30px;
+  bottom: 78px;
   right: 30px;
   z-index: 20;
   display: flex;
@@ -491,10 +554,10 @@ body.cursor-hidden, body.cursor-hidden * {
   50% { opacity: 0.4; }
 }
 
-/* ── Timeline ── */
+/* ── Timeline (pinned to the very bottom, below the meme-info stack) ── */
 #timeline-wrapper {
   position: fixed;
-  bottom: 30px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   width: 70%;
@@ -703,6 +766,81 @@ body.cursor-hidden, body.cursor-hidden * {
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 
+/* ── Scoreboard ── */
+.report-scoreboard {
+  margin-bottom: 2rem;
+}
+
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255, 250, 240, 0.06);
+  font-size: 0.7rem;
+}
+.sb-row.you {
+  background: rgba(255, 204, 102, 0.1);
+  border: 1px solid rgba(255, 204, 102, 0.4);
+  border-radius: 3px;
+}
+
+.sb-pos {
+  width: 2em;
+  text-align: right;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  color: rgba(255, 250, 240, 0.4);
+}
+.sb-row.you .sb-pos { color: #ffcc66; }
+
+.sb-name {
+  flex: 1;
+  text-align: left;
+  letter-spacing: 0.08em;
+  color: rgba(255, 250, 240, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-score {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  color: rgba(255, 250, 240, 0.9);
+}
+
+.sb-rank {
+  width: 3.5em;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #ffcc66;
+}
+
+/* Mini scoreboard on the attract screen */
+#overlay-board {
+  margin-top: 2rem;
+  min-width: 300px;
+  transition: opacity 0.8s;
+}
+#overlay-board.hidden { opacity: 0; }
+
+.ob-title {
+  font-size: 0.55rem;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  color: var(--fg-faint);
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+}
+
+#overlay-board .sb-row {
+  border-bottom-color: rgba(232, 224, 216, 0.06);
+}
+#overlay-board .sb-name { color: var(--fg-dim); }
+#overlay-board .sb-score { color: var(--fg-dim); }
+
 #report-close {
   background: transparent;
   border: 1px solid rgba(255, 250, 240, 0.3);
@@ -765,9 +903,22 @@ body.cursor-hidden, body.cursor-hidden * {
   background: rgba(232, 224, 216, 0.05);
   border-radius: 3px;
   border: 1px solid rgba(232, 224, 216, 0.08);
-  cursor: default;
-  transition: opacity 0.2s ease;
+  cursor: pointer;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
   opacity: 1;
+}
+/* Currently focused meme's chip */
+.cm-item.active {
+  border-color: rgba(232, 224, 216, 0.5);
+  background: rgba(232, 224, 216, 0.12);
+}
+.cm-item.active .cm-name {
+  color: rgba(232, 224, 216, 0.95);
+}
+/* Already salvaged */
+.cm-item.salvaged .cm-name::after {
+  content: ' ✓';
+  color: var(--salvage);
 }
 
 .cm-dot {
@@ -832,10 +983,10 @@ body.cursor-hidden, body.cursor-hidden * {
   transition: opacity 0.1s;
 }
 
-/* ── FOMO Counter ── */
+/* ── FOMO Counter (below the velocity meter) ── */
 #fomo-counter {
   position: fixed;
-  top: 30px;
+  top: 150px;
   right: 30px;
   z-index: 20;
   pointer-events: none;

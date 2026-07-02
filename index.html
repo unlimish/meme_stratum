@@ -25,10 +25,15 @@
           <span>Scroll to excavate 26 years of internet culture</span>
           <span class="jp">スクロール／ドラッグ／矢印キーで、26年分のインターネット文化を発掘する</span>
           <span class="jp">SALVAGE で5体のミームを永久保存 · 選ばなかったミームは風化して忘れ去られる</span>
+          <span class="jp">あなたにはランダムな発掘者IDが与えられ、キュレーションはスコアボードに刻まれる</span>
           <span class="jp warn">デジタル考古学者として、あなたは53体の中からたった5体を選ぶ</span>
         </div>
         <button id="connect-btn">ENTER</button>
         <div class="overlay-hint">クリック・スクロール・キー操作で開始 / any input to begin</div>
+        <div id="overlay-board" class="hidden">
+          <div class="ob-title">HALL OF DIGGERS</div>
+          <div id="overlay-board-list"></div>
+        </div>
         <div class="overlay-serial">
           <button id="serial-btn" class="serial-link">CONNECT ROTARY ENCODER</button>
         </div>
@@ -43,32 +48,27 @@
       <div class="hud-era" id="era-label"></div>
     </div>
 
-    <!-- Consumption Metrics (satirical) -->
+    <!-- Visitor identity: who is digging + their session score (top-left) -->
     <div id="metrics-panel" class="hidden">
-      <div class="metric">
-        <div class="metric-label">CONSUMPTION VELOCITY</div>
-        <div class="metric-value" id="consumption-velocity">0.0</div>
-        <div class="metric-unit">memes/sec</div>
-        <div class="metric-bar"><div class="metric-fill" id="velocity-fill"></div></div>
+      <div class="metric" id="visitor-card">
+        <div class="metric-label">DIGGER ID</div>
+        <div class="metric-value" id="visitor-name">—</div>
+        <div class="visitor-scorerow">
+          <span class="visitor-score"><span id="curation-score">0</span> pts</span>
+          <span class="visitor-rank">RANK <span id="curation-rank">-</span></span>
+        </div>
       </div>
-      <div class="metric">
-        <div class="metric-label">SALVAGE CAPACITY</div>
-        <div class="metric-value" id="salvage-capacity">5</div>
-        <div class="metric-unit">remaining</div>
+    </div>
+
+    <!-- Ambient satire meter: consumption velocity (bottom-right, separate concern) -->
+    <div id="ambient-metrics" class="hidden">
+      <div class="metric-label">CONSUMPTION VELOCITY</div>
+      <div class="velocity-row">
+        <span class="metric-value" id="consumption-velocity">0.0</span>
+        <span class="metric-unit">memes/sec</span>
       </div>
-      <div class="metric">
-        <div class="metric-label">CURATION SCORE</div>
-        <div class="metric-value" id="curation-score">0</div>
-        <div class="metric-unit">points</div>
-      </div>
-      <div class="metric">
-        <div class="metric-label">RANK</div>
-        <div class="metric-value" id="curation-rank">-</div>
-        <div class="metric-unit">grade</div>
-      </div>
-      <div class="metric warning" id="consumption-warning">
-        <div class="metric-label">⚠ CONSUMPTION LIMIT APPROACHING</div>
-      </div>
+      <div class="metric-bar"><div class="metric-fill" id="velocity-fill"></div></div>
+      <div class="warning" id="consumption-warning">⚠ CONSUMPTION LIMIT APPROACHING</div>
     </div>
 
     <!-- Focus link: leader line tying the focused fossil to its label -->
@@ -79,9 +79,11 @@
 
     <!-- Active Meme Info + Salvage (flexbox column, never overlap) -->
     <div id="meme-info" class="hidden">
-      <div id="salvage-btn" class="hidden">CLICK TO SALVAGE</div>
       <div class="meme-info-inner">
-        <div class="meme-info-name" id="active-meme">— —</div>
+        <div class="meme-title-row">
+          <div class="meme-info-name" id="active-meme">— —</div>
+          <div id="salvage-btn" class="hidden">SALVAGE</div>
+        </div>
         <div id="active-accent"></div>
         <div class="meme-info-years" id="active-duration"></div>
         <div class="meme-info-salvage" id="active-salvage"></div>
@@ -145,6 +147,10 @@
         <div class="report-forgotten" id="report-forgotten">
           <div class="forgotten-count">0 fossils were left to decay</div>
           <div class="forgotten-desc">Unsalvaged memes fade into geological noise</div>
+        </div>
+        <div class="report-scoreboard">
+          <div class="collection-title">HALL OF DIGGERS (スコアボード)</div>
+          <div id="scoreboard-list"></div>
         </div>
         <button id="report-close">EXCAVATE AGAIN →</button>
       </div>

@@ -65,6 +65,13 @@ const state = {
   totalMemesMissed: 0,
   hoveredContemporary: null,
   lastCY: null,
+  // Pinned focus (clicked from CONTEMPORARIES) — lets visitors reach long-lived
+  // memes like Pepe/Doge that the auto-focus (short-lived first) never picks
+  selectedMeme: null,
+  // Scoreboard identity
+  visitorName: '',
+  scoreRecorded: false,
+  sessionStartedAt: 0,
 };
 
 // ── Idle pacing (unattended gallery loop) ──
@@ -104,11 +111,14 @@ const timelineWrapper = document.getElementById('timeline-wrapper');
 const timelineRuler = document.getElementById('timeline-ruler');
 // Satirical DOM elements
 const metricsPanel = document.getElementById('metrics-panel');
+const ambientMetrics = document.getElementById('ambient-metrics');
 const velocityEl = document.getElementById('consumption-velocity');
 const velocityFill = document.getElementById('velocity-fill');
-// depthEl removed — landfill depth metric deleted
-const salvageCapEl = document.getElementById('salvage-capacity');
-const warningEl = document.querySelector('#metrics-panel .warning');
+const warningEl = document.getElementById('consumption-warning');
+const visitorNameEl = document.getElementById('visitor-name');
+const scoreboardListEl = document.getElementById('scoreboard-list');
+const overlayBoardEl = document.getElementById('overlay-board');
+const overlayBoardListEl = document.getElementById('overlay-board-list');
 const salvageBtn = document.getElementById('salvage-btn');
 const reportPanel = document.getElementById('consumption-report');
 const reportCloseBtn = document.getElementById('report-close');
@@ -131,6 +141,55 @@ const veinMeshes = [];
 
 // Audio
 let audioCtx, droneOsc, subOsc, filterNode, gainNode, noiseNode, noiseGain;
+
+// ─────────────────────────────────────────────
+//  VISITOR IDENTITY + SCOREBOARD
+//  Anonymous visitors get a random word-combo name so
+//  strangers can compete across the exhibition day
+// ─────────────────────────────────────────────
+const NAME_ADJ = [
+  'FERAL', 'SLEEPY', 'CURSED', 'SHINY', 'POLITE', 'DUSTY', 'TURBO', 'SILENT',
+  'NOBLE', 'CHAOTIC', 'HUMBLE', 'SPICY', 'ANCIENT', 'GLITCHED', 'SOGGY', 'BASED',
+];
+const NAME_NOUN = [
+  'ARCHIVIST', 'EXCAVATOR', 'CURATOR', 'RACCOON', 'DIGGER', 'SCHOLAR',
+  'LURKER', 'HOARDER', 'PIGEON', 'GOBLIN', 'INTERN', 'PROPHET',
+];
+function generateVisitorName() {
+  const adj = NAME_ADJ[Math.floor(Math.random() * NAME_ADJ.length)];
+  const noun = NAME_NOUN[Math.floor(Math.random() * NAME_NOUN.length)];
+  const num = String(Math.floor(Math.random() * 100)).padStart(2, '0');
+  return `${adj} ${noun} #${num}`;
+}
+
+const SCOREBOARD_KEY = 'meme-stratum-scoreboard';
+function loadScoreboard() {
+  try { return JSON.parse(localStorage.getItem(SCOREBOARD_KEY)) || []; }
+  catch { return []; }
+}
+function saveScoreboard(board) {
+  board.sort((a, b) => b.score - a.score);
+  try { localStorage.setItem(SCOREBOARD_KEY, JSON.stringify(board.slice(0, 50))); }
+  catch { /* storage full/blocked — the board is a bonus, never break the piece */ }
+}
+function renderScoreboardInto(el, board, highlightTs, limit) {
+  el.innerHTML = '';
+  const rows = board.slice(0, limit);
+  // The current visitor always sees their own position, even outside the top rows
+  const ownIdx = highlightTs != null ? board.findIndex(e => e.ts === highlightTs) : -1;
+  if (ownIdx >= limit) rows.push(board[ownIdx]);
+  for (const entry of rows) {
+    const row = document.createElement('div');
+    row.className = 'sb-row' + (entry.ts === highlightTs ? ' you' : '');
+    row.innerHTML = `
+      <span class="sb-pos">${board.indexOf(entry) + 1}</span>
+      <span class="sb-name">${entry.name}</span>
+      <span class="sb-score">${entry.score}</span>
+      <span class="sb-rank">RK ${entry.rank}</span>
+    `;
+    el.appendChild(row);
+  }
+}
 
 // ─────────────────────────────────────────────
 //  ERA MAPPING
@@ -680,21 +739,20 @@ function updateMetrics() {
   velocityFill.style.width = velPercent + '%';
   velocityFill.className = 'metric-fill' + (velPercent > 80 ? ' danger' : velPercent > 50 ? ' warn' : '');
 
-  salvageCapEl.textContent = state.salvageRemaining;
-
   // Consumption limit warning at 90%
   const consumptionPercent = (state.totalConsumption / CONSUMPTION_LIMIT) * 100;
   state.isWarning = consumptionPercent > 90 && state.consumptionVelocity > 2;
   warningEl.style.display = state.isWarning ? 'block' : 'none';
 
-  // Update salvage button (never while attract/report — it stays clickable even when faded)
+  // Salvage pill: capacity lives in the button itself, beside the meme name
+  // (never while attract/report — it stays clickable even when faded)
   if (state.mode !== 'active') {
     salvageBtn.classList.add('hidden');
   } else if (closest && state.salvageRemaining > 0 && !state.salvagedMemes.has(closest.data.id)) {
-    salvageBtn.textContent = `CLICK TO SALVAGE (${state.salvageRemaining} left)`;
+    salvageBtn.textContent = `SALVAGE · ${state.salvageRemaining} LEFT`;
     salvageBtn.classList.remove('hidden', 'exhausted');
   } else if (closest && state.salvageRemaining === 0) {
-    salvageBtn.textContent = 'SALVAGE CAPACITY EXHAUSTED';
+    salvageBtn.textContent = 'NO SALVAGE LEFT';
     salvageBtn.classList.remove('hidden');
     salvageBtn.classList.add('exhausted');
   } else {
@@ -822,6 +880,7 @@ let closest = null;
 
 window.addEventListener('wheel', e => {
   state.targetY += e.deltaY * 0.12;
+  state.selectedMeme = null; // manual navigation releases a pinned focus
   clampY();
   resetIdleTimer();
 }, { passive: true });
@@ -833,6 +892,7 @@ window.addEventListener('mousedown', e => {
 });
 window.addEventListener('mousemove', e => {
   if (!isDragging) return;
+  if (Math.abs(e.clientY - lastY) > 2) state.selectedMeme = null; // real drag releases the pin
   state.targetY -= (e.clientY - lastY) * 0.2;
   lastY = e.clientY;
   clampY();
@@ -844,8 +904,15 @@ window.addEventListener('mouseup', () => {
 });
 
 window.addEventListener('keydown', e => {
+  if (e.key.startsWith('Arrow')) state.selectedMeme = null; // manual navigation releases the pin
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') state.targetY += K_Y;
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') state.targetY -= K_Y;
+  // Space / Enter salvage from the keyboard (guard the session's first second so
+  // the keypress that started the session can't instantly spend a salvage)
+  if ((e.key === ' ' || e.key === 'Enter') && state.mode === 'active' &&
+      performance.now() - state.sessionStartedAt > 1000) {
+    handleSalvage();
+  }
   if (e.key === 'Escape') {
     if (state.mode === 'report') {
       hideConsumptionReport();
@@ -985,6 +1052,13 @@ function startExperience() {
   state.activeScrollTime = 0;
   resetFomo();
 
+  // Every visitor digs under a fresh random identity
+  state.visitorName = generateVisitorName();
+  visitorNameEl.textContent = state.visitorName;
+  state.scoreRecorded = false;
+  state.selectedMeme = null;
+  state.sessionStartedAt = performance.now();
+
   state.mode = 'active';
   state.autoScrolling = false;
   overlay.classList.add('hidden');
@@ -992,6 +1066,7 @@ function startExperience() {
   memeInfo.classList.remove('hidden');
   timelineWrapper.classList.remove('hidden');
   metricsPanel.classList.remove('hidden');
+  ambientMetrics.classList.remove('hidden');
   initAudio();
   resetIdleTimer();
   // Auto-hide serial indicator if never connects
@@ -1021,6 +1096,8 @@ function resetSession() {
 
   lastFocusPanel = null; // camera pan drifts back to centre
   state.salvagedMemes.clear();
+  state.selectedMeme = null;
+  state.scoreRecorded = false;
   state.salvageRemaining = SALVAGE_CAPACITY_MAX;
   state.totalConsumption = 0;
   state.totalMemesConsumed = 0;
@@ -1051,6 +1128,15 @@ function enterAttract() {
   memeInfo.classList.add('hidden');
   timelineWrapper.classList.add('hidden');
   metricsPanel.classList.add('hidden');
+  ambientMetrics.classList.add('hidden');
+  // Attract screen teases the day's top diggers
+  const board = loadScoreboard();
+  if (board.length > 0) {
+    renderScoreboardInto(overlayBoardListEl, board, null, 3);
+    overlayBoardEl.classList.remove('hidden');
+  } else {
+    overlayBoardEl.classList.add('hidden');
+  }
   // Rewind to the bottom of the dig; the drift then climbs through all strata
   state.targetY = -2;
   state.autoScrolling = false; // resumes once the rewind settles (see animate)
@@ -1181,6 +1267,18 @@ function animate() {
     }
   }
 
+  // Pinned focus (clicked in CONTEMPORARIES) overrides the auto pick — this is
+  // how long-lived memes (Pepe, Doge, Rickroll…) become focusable and salvageable
+  if (state.selectedMeme) {
+    let pinned = null, pinnedD = Infinity;
+    for (const p of memePanels) {
+      if (p.data.id !== state.selectedMeme.id) continue;
+      const d = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
+      if (d < pinnedD) { pinnedD = d; pinned = p; }
+    }
+    if (pinned) closest = pinned;
+  }
+
   // ── Highlight active panel + salvage/decay mechanics ──
   for (const p of memePanels) {
     const isActive = closest && p === closest;
@@ -1265,11 +1363,12 @@ function animate() {
       const cmList = document.getElementById('cm-list');
       if (cmList) {
         cmList.innerHTML = '';
-        const eraYear = cYear;
+        // Everything alive this year — long-lived memes (Pepe, Doge…) stay
+        // selectable through their whole lifespan, not just near their birth
         const contemporaries = memeData
-          .filter(m => m.id !== closest.data.id && Math.abs(m.bornYear - eraYear) <= 3)
+          .filter(m => m.bornYear <= cYear && m.diedYear >= cYear)
           .sort((a, b) => a.bornYear - b.bornYear)
-          .slice(0, 5);
+          .slice(0, 8);
         const cmContainer = document.getElementById('contemporary-memes');
         if (contemporaries.length > 0) {
           cmContainer.classList.remove('hidden');
@@ -1304,6 +1403,12 @@ function animate() {
                 p.baseMat.userData.hoverTarget = null;
               }
             });
+            // Click pins the meme as the focused/salvageable target
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              state.selectedMeme = cm;
+              resetIdleTimer();
+            });
             cmList.appendChild(item);
           }
         } else if (cmContainer) {
@@ -1337,6 +1442,15 @@ function animate() {
   }
   lastFocusPanel = focusPanel;
   updateFocusLink(focusPanel, t);
+
+  // Contemporaries chip states: mark the focused one and the already-salvaged
+  const cmListEl = document.getElementById('cm-list');
+  if (cmListEl) {
+    for (const el of cmListEl.children) {
+      el.classList.toggle('active', !!closest && el.dataset.memeId === closest.data.id);
+      el.classList.toggle('salvaged', state.salvagedMemes.has(el.dataset.memeId));
+    }
+  }
 
   // ── Update satirical metrics ──
   updateMetrics();
@@ -1625,6 +1739,28 @@ function showConsumptionReport() {
   document.getElementById('report-score').textContent = score.total;
   document.getElementById('report-combo').textContent = '+' + score.comboBonus;
   document.getElementById('report-rank').textContent = 'RANK ' + getCurationRank(score.total);
+
+  // The report is addressed to the visitor's random identity
+  document.querySelector('.report-sub').textContent =
+    (state.visitorName ? state.visitorName + ' — ' : '') + '消費完了報告書';
+
+  // Record this dig on the shared scoreboard (once per session, only if they
+  // actually preserved something) and show where they landed
+  let highlightTs = null;
+  if (!state.scoreRecorded && state.salvagedMemes.size > 0) {
+    state.scoreRecorded = true;
+    const entry = {
+      name: state.visitorName || generateVisitorName(),
+      score: score.total,
+      rank: getCurationRank(score.total),
+      ts: Date.now(),
+    };
+    highlightTs = entry.ts;
+    const board = loadScoreboard();
+    board.push(entry);
+    saveScoreboard(board);
+  }
+  renderScoreboardInto(scoreboardListEl, loadScoreboard(), highlightTs, 8);
 
   const mythicCount = salvagedList.filter(m => getRarity(m) === 'MYTHIC').length;
   const suddenCount = salvagedList.filter(m => m.deathType === 'sudden').length;
