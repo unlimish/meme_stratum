@@ -314,6 +314,36 @@ body.cursor-hidden, body.cursor-hidden * {
   background: var(--warn);
 }
 
+/* ── Focus link: fossil → label leader line ── */
+#focus-link {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 12;
+  pointer-events: none;
+}
+#focus-line {
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#focus-dot {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+/* Colour accent under the meme name — same colour as the bracket in the scene */
+#active-accent {
+  width: 46px;
+  height: 3px;
+  border-radius: 2px;
+  margin: 8px auto 0;
+  opacity: 0;
+  transition: opacity 0.4s, background 0.4s;
+}
+
 /* ── Active Meme Info (flexbox column with salvage above) ── */
 #meme-info {
   position: fixed;

@@ -71,11 +71,18 @@
       </div>
     </div>
 
+    <!-- Focus link: leader line tying the focused fossil to its label -->
+    <svg id="focus-link">
+      <line id="focus-line" x1="0" y1="0" x2="0" y2="0" />
+      <circle id="focus-dot" cx="0" cy="0" r="3" />
+    </svg>
+
     <!-- Active Meme Info + Salvage (flexbox column, never overlap) -->
     <div id="meme-info" class="hidden">
       <div id="salvage-btn" class="hidden">CLICK TO SALVAGE</div>
       <div class="meme-info-inner">
         <div class="meme-info-name" id="active-meme">— —</div>
+        <div id="active-accent"></div>
         <div class="meme-info-years" id="active-duration"></div>
         <div class="meme-info-salvage" id="active-salvage"></div>
         <div class="meme-info-desc" id="active-description"></div>

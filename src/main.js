@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { memeData, getRarity, getGrade, calculateCurationScore, getCurationRank } from './memeData.js';
 
+// Dev guard: if this module is re-executed on a live page (vite HMR re-import),
+// two animate loops would fight over the DOM — force one clean page reload instead.
+if (window.__memeStratumBooted) {
+  location.reload();
+  throw new Error('stale module instance — reloading');
+}
+window.__memeStratumBooted = true;
+
 // ─────────────────────────────────────────────
 //  MEME STRATUM — Geological Excavation as
 //  Critique of Mass-Consumption Society
@@ -107,10 +115,14 @@ const reportCloseBtn = document.getElementById('report-close');
 const autoIndicator = document.getElementById('auto-indicator');
 const curationScoreEl = document.getElementById('curation-score');
 const curationRankEl = document.getElementById('curation-rank');
+const focusLineEl = document.getElementById('focus-line');
+const focusDotEl = document.getElementById('focus-dot');
+const accentEl = document.getElementById('active-accent');
 
 // ── Three.js ──
 let scene, camera, renderer;
 let particles, dustParticles;
+let focusBracket;
 const PARTICLE_COUNT = 2000;
 const DUST_COUNT = 800;
 const strataMeshes = [];
@@ -391,6 +403,34 @@ function createFossilTexture(meme, ageFactor, isSalvaged) {
 }
 
 // ─────────────────────────────────────────────
+//  FOCUS BRACKET — museum-specimen corner marks
+//  around the fossil the label is describing
+// ─────────────────────────────────────────────
+function createBracketTexture() {
+  const S = 256, L = 46, W = 7;
+  const cvs = document.createElement('canvas');
+  cvs.width = S; cvs.height = S;
+  const ctx = cvs.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  // Four L-shaped corner brackets (drawn white, tinted per meme via material.color)
+  for (const [x, y, dx, dy] of [[0, 0, 1, 1], [S, 0, -1, 1], [0, S, 1, -1], [S, S, -1, -1]]) {
+    ctx.fillRect(Math.min(x, x + dx * L), Math.min(y, y + dy * W), L, W);
+    ctx.fillRect(Math.min(x, x + dx * W), Math.min(y, y + dy * L), W, L);
+  }
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Some meme colours are near-black — lift them so UI accents stay visible
+function uiColorFor(meme) {
+  const c = new THREE.Color(meme.color);
+  const luma = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  if (luma < 0.35) c.lerp(new THREE.Color('#e8e0d8'), 0.55);
+  return c;
+}
+
+// ─────────────────────────────────────────────
 //  THREE.JS SCENE — Geological strata
 // ─────────────────────────────────────────────
 function initThree() {
@@ -578,6 +618,19 @@ function initThree() {
   }));
   scene.add(dustParticles);
   dustParticles.userData = { velocities: dustVel };
+
+  // ── Focus bracket: glides between fossils as the label changes ──
+  focusBracket = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      map: createBracketTexture(),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  focusBracket.visible = false;
+  scene.add(focusBracket);
 
   window.addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
@@ -966,6 +1019,7 @@ function resetSession() {
     p.mesh.scale.setScalar(1.0);
   }
 
+  lastFocusPanel = null; // camera pan drifts back to centre
   state.salvagedMemes.clear();
   state.salvageRemaining = SALVAGE_CAPACITY_MAX;
   state.totalConsumption = 0;
@@ -1085,13 +1139,17 @@ function animate() {
     clampY();
   }
 
+  // Slow pan toward the focused fossil so the label always points at something visible
+  const focusTargetX = (state.mode === 'active' && lastFocusPanel) ? lastFocusPanel.mesh.position.x * 0.55 : 0;
+  camFocusX += (focusTargetX - camFocusX) * 0.02;
+
   camera.position.set(
-    Math.sin(t * 0.1) * 0.5 + Math.sin(t * 0.3) * 0.2,
+    camFocusX + Math.sin(t * 0.1) * 0.5 + Math.sin(t * 0.3) * 0.2,
     state.currentY + 2,
     14 + Math.cos(t * 0.08) * 0.5
   );
   camera.lookAt(
-    Math.sin(t * 0.15) * 0.3,
+    camFocusX + Math.sin(t * 0.15) * 0.3,
     state.currentY,
     -STRATA_Z_OFFSET
   );
@@ -1142,9 +1200,10 @@ function animate() {
       // weathers into the stratum — only during a visitor's session
       if (inRange && state.mode === 'active') p.viewedS += 0.016;
       const decay = Math.min(0.35, p.viewedS * 0.006);
-      const targetOpacity = isActive ? 1.0 : (inRange ? Math.max(0.15, 0.7 - decay) : Math.max(0.04, 0.12 - decay));
+      // Non-focused neighbours sit back (0.55) so the bracketed fossil reads as "the one"
+      const targetOpacity = isActive ? 1.0 : (inRange ? Math.max(0.15, 0.55 - decay) : Math.max(0.04, 0.12 - decay));
       p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, targetOpacity, 0.04);
-      p.mesh.scale.setScalar(1.0);
+      p.mesh.scale.setScalar(THREE.MathUtils.lerp(p.mesh.scale.x, isActive ? 1.06 : 1.0, 0.1));
     }
   }
 
@@ -1264,6 +1323,21 @@ function animate() {
     }
   }
 
+  // ── Focus link: bracket + leader line tying the label to its fossil ──
+  let focusPanel = closest;
+  if (state.hoveredContemporary) {
+    // Hovering a contemporary chip: point at that meme's nearest panel instead
+    let best = null, bestD = Infinity;
+    for (const p of memePanels) {
+      if (p.data.id !== state.hoveredContemporary.id) continue;
+      const d = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
+      if (d < bestD) { bestD = d; best = p; }
+    }
+    if (best) focusPanel = best;
+  }
+  lastFocusPanel = focusPanel;
+  updateFocusLink(focusPanel, t);
+
   // ── Update satirical metrics ──
   updateMetrics();
 
@@ -1293,8 +1367,8 @@ function animate() {
     if (isNew && !state.salvagedMemes.has(closest.data.id)) {
       // "Fresh packaging" glow
       closest.baseMat.opacity = THREE.MathUtils.lerp(closest.baseMat.opacity, 1.0, 0.1);
-      // Add slight scale pulse for "consumer appeal"
-      const pulse = 1.0 + Math.sin(t * 3) * 0.02;
+      // Add slight scale pulse for "consumer appeal" (around the focused 1.06 base)
+      const pulse = 1.06 + Math.sin(t * 3) * 0.02;
       closest.mesh.scale.setScalar(pulse);
     }
   }
@@ -1337,6 +1411,67 @@ function animate() {
   if (typeof glitchOverlay !== 'undefined') {
     glitchOverlay.update(state.mode === 'active' ? state.scrollSpeed : 0);
   }
+}
+
+// ── Focus link update (called every frame from animate) ──
+const _focusTarget = new THREE.Vector3();
+const _focusProj = new THREE.Vector3();
+let lastFocusPanel = null; // camera pans toward this fossil (1-frame lag is fine)
+let camFocusX = 0;
+
+function updateFocusLink(panel, t) {
+  const show = state.mode === 'active' && panel;
+  focusBracket.visible = !!show;
+  if (!show) {
+    focusLineEl.setAttribute('opacity', '0');
+    focusDotEl.setAttribute('opacity', '0');
+    accentEl.style.opacity = '0';
+    return;
+  }
+
+  // Bracket glides to the focused fossil, matching its size and tilt
+  const geoP = panel.mesh.geometry.parameters;
+  const targetW = geoP.width * panel.mesh.scale.x * 1.18;
+  const targetH = geoP.height * panel.mesh.scale.y * 1.18;
+  _focusTarget.set(panel.mesh.position.x, panel.mesh.position.y, panel.mesh.position.z + 0.08);
+  focusBracket.position.lerp(_focusTarget, 0.18);
+  focusBracket.scale.x += (targetW - focusBracket.scale.x) * 0.18;
+  focusBracket.scale.y += (targetH - focusBracket.scale.y) * 0.18;
+  focusBracket.rotation.x += (panel.mesh.rotation.x - focusBracket.rotation.x) * 0.18;
+  focusBracket.rotation.y += (panel.mesh.rotation.y - focusBracket.rotation.y) * 0.18;
+  focusBracket.rotation.z += (panel.mesh.rotation.z - focusBracket.rotation.z) * 0.18;
+
+  const col = uiColorFor(panel.data);
+  focusBracket.material.color.lerp(col, 0.2);
+  focusBracket.material.opacity = 0.75 + Math.sin(t * 2.5) * 0.2;
+
+  // Leader line: bottom edge of the bracket → top of the label block
+  const cssCol = '#' + focusBracket.material.color.getHexString();
+  _focusProj.copy(focusBracket.position);
+  _focusProj.y -= focusBracket.scale.y / 2 + 0.05;
+  _focusProj.project(camera);
+  const onScreen = _focusProj.z < 1;
+  const x1 = (_focusProj.x * 0.5 + 0.5) * innerWidth;
+  const y1 = (-_focusProj.y * 0.5 + 0.5) * innerHeight;
+  const rect = memeInfo.getBoundingClientRect();
+  const x2 = rect.left + rect.width / 2;
+  const y2 = rect.top - 8;
+  // Only draw while the fossil sits above the label — no upward lines
+  const lineVisible = onScreen && !memeInfo.classList.contains('hidden') && y1 < y2 - 12;
+  focusLineEl.setAttribute('x1', x1);
+  focusLineEl.setAttribute('y1', y1);
+  focusLineEl.setAttribute('x2', x2);
+  focusLineEl.setAttribute('y2', y2);
+  focusLineEl.setAttribute('stroke', cssCol);
+  focusLineEl.setAttribute('opacity', lineVisible ? '0.45' : '0');
+  focusDotEl.setAttribute('cx', x1);
+  focusDotEl.setAttribute('cy', y1);
+  focusDotEl.setAttribute('fill', cssCol);
+  focusDotEl.setAttribute('opacity', lineVisible ? '0.8' : '0');
+
+  // Accent bar under the name in the same colour closes the loop
+  accentEl.style.background = cssCol;
+  accentEl.style.opacity = activeMemeEl.textContent ? '1' : '0';
 }
 
 // ── Helper: salvage value calculation (matches test) ──
