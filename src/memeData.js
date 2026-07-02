@@ -75,3 +75,29 @@ export function getGrade(consumed, salvaged, missed) {
   if (consumed > 100) return 'BINGE CONSUMER';
   return 'CASUAL SCROLLER';
 }
+
+// ── Curation Score System ──
+const RARITY_SCORES = { MYTHIC: 100, RARE: 50, UNCOMMON: 25, DISPOSABLE: 10 };
+
+export function calculateCurationScore(salvagedMemes) {
+  let baseScore = 0;
+  const typeCount = {};
+  for (const meme of salvagedMemes) {
+    const rarity = getRarity(meme);
+    baseScore += RARITY_SCORES[rarity] || 0;
+    typeCount[meme.deathType] = (typeCount[meme.deathType] || 0) + 1;
+  }
+  let comboBonus = 0;
+  for (const count of Object.values(typeCount)) {
+    if (count >= 2) comboBonus += (count - 1) * 25;
+  }
+  return { baseScore, comboBonus, total: baseScore + comboBonus };
+}
+
+export function getCurationRank(totalScore) {
+  if (totalScore >= 450) return 'S';
+  if (totalScore >= 350) return 'A';
+  if (totalScore >= 250) return 'B';
+  if (totalScore >= 150) return 'C';
+  return 'D';
+}

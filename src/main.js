@@ -954,12 +954,13 @@ function animate() {
     el.classList.toggle('active', el.id === `tick-year-${cYear}`);
   });
 
-  // ── Find active meme — only in current stratum (year) ──
+  // ── Find active meme — closest in current stratum, fallback to nearest ──
   let closestDist = Infinity;
   closest = null;
-  for (const p of memePanels) {
-    // Only consider memes active during current year
-    if (p.data.bornYear > cYear || p.data.diedYear < cYear) continue;
+  // First: try memes born/died exactly in current year (non-long-lived preferred)
+  const currentYearMemes = memePanels.filter(p => p.data.bornYear <= cYear && p.data.diedYear >= cYear && (p.data.diedYear - p.data.bornYear) < 10);
+  const candidates = currentYearMemes.length > 0 ? currentYearMemes : memePanels.filter(p => p.data.bornYear <= cYear && p.data.diedYear >= cYear);
+  for (const p of candidates) {
     const d = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
     if (d < closestDist) {
       closestDist = d;

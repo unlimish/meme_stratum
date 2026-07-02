@@ -600,6 +600,15 @@ body, html {
   font-style: italic;
 }
 
+.report-rank {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  letter-spacing: 0.1em;
+  color: #ffcc66;
+  margin: 0.5rem 0 1.5rem;
+}
+
 .report-collection {
   margin-bottom: 2rem;
 }

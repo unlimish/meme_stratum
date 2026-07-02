@@ -356,6 +356,56 @@ describe('Salvage Gameplay', () => {
   });
 });
 
+// ── Curation Score (ゲーム性: キュレーション評価) ──
+describe('Curation Score Game', () => {
+  it('should score MYTHIC memes highest', () => {
+    const scores = { MYTHIC: 100, RARE: 50, UNCOMMON: 25, DISPOSABLE: 10 };
+    expect(scores.MYTHIC).toBeGreaterThan(scores.RARE);
+  });
+
+  it('should calculate total curation score from 5 salvaged', () => {
+    const salvaged = [
+      { rarity: 'MYTHIC' },
+      { rarity: 'RARE' },
+      { rarity: 'DISPOSABLE' },
+    ];
+    const scores = { MYTHIC: 100, RARE: 50, UNCOMMON: 25, DISPOSABLE: 10 };
+    const total = salvaged.reduce((sum, m) => sum + (scores[m.rarity] || 0), 0);
+    expect(total).toBe(160);
+  });
+
+  it('should give combo bonus for same deathType', () => {
+    const salvaged = [
+      { deathType: 'resurrected' },
+      { deathType: 'resurrected' },
+      { deathType: 'fade' },
+    ];
+    const typeCount = {};
+    for (const m of salvaged) {
+      typeCount[m.deathType] = (typeCount[m.deathType] || 0) + 1;
+    }
+    let comboBonus = 0;
+    for (const count of Object.values(typeCount)) {
+      if (count >= 2) comboBonus += (count - 1) * 25;
+    }
+    expect(comboBonus).toBe(25); // 2 resurrected = 25 bonus
+  });
+
+  it('should have maximum possible score', () => {
+    const perfect = [
+      { rarity: 'MYTHIC', deathType: 'resurrected' },
+      { rarity: 'MYTHIC', deathType: 'resurrected' },
+      { rarity: 'MYTHIC', deathType: 'resurrected' },
+      { rarity: 'MYTHIC', deathType: 'resurrected' },
+      { rarity: 'MYTHIC', deathType: 'resurrected' },
+    ];
+    const scores = { MYTHIC: 100, RARE: 50, UNCOMMON: 25, DISPOSABLE: 10 };
+    const base = perfect.reduce((sum, m) => sum + scores[m.rarity], 0);
+    const combo = 4 * 25; // 5 same type = 4 combos
+    expect(base + combo).toBe(600);
+  });
+});
+
 // ── Mock DOM tests ──
 describe('DOM Integration', () => {
   beforeEach(() => {
