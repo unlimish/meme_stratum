@@ -112,6 +112,7 @@ body.cursor-hidden, body.cursor-hidden * {
   letter-spacing: 0.06em;
   color: var(--fg);
   margin-bottom: 1.2rem;
+  text-shadow: 0 0 70px rgba(232, 224, 216, 0.18);
 }
 
 .overlay-sub {
@@ -229,6 +230,16 @@ body.cursor-hidden, body.cursor-hidden * {
   margin-top: 0.8rem;
   text-transform: uppercase;
   min-height: 1.2em;
+}
+
+.hud-era-jp {
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  font-size: clamp(0.55rem, 0.9vw, 0.7rem);
+  letter-spacing: 0.5em;
+  color: var(--fg-faint);
+  margin-top: 0.5rem;
+  min-height: 1em;
 }
 
 /* ── Consumption Metrics Panel (Industrial/Satirical) ── */
@@ -939,6 +950,55 @@ body.cursor-hidden, body.cursor-hidden * {
 .cm-years {
   font-size: 0.55rem;
   color: rgba(232, 224, 216, 0.3);
+}
+
+/* ── Salvage flash: archival rite ── */
+.salvage-flash {
+  position: fixed;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateY(14px);
+  text-align: center;
+  padding: 22px 56px;
+  border-top: 1px solid rgba(255, 204, 102, 0.55);
+  border-bottom: 1px solid rgba(255, 204, 102, 0.55);
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  filter: blur(4px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              filter 0.7s;
+}
+.salvage-flash.in {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate(-50%, -50%) translateY(0);
+}
+.salvage-flash.out {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translate(-50%, -50%) translateY(-18px);
+  transition-duration: 0.9s;
+}
+
+.sf-word {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 200;
+  font-size: 2.6rem;
+  letter-spacing: 0.55em;
+  margin-right: -0.55em; /* recentre the tracking */
+  color: #ffcc66;
+  text-shadow: 0 0 30px rgba(255, 204, 102, 0.35);
+}
+
+.sf-sub {
+  margin-top: 10px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  color: rgba(255, 204, 102, 0.7);
 }
 
 /* ── Auto-excavation indicator ── */

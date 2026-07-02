@@ -95,6 +95,7 @@ const serialBtn = document.getElementById('serial-btn');
 const hud = document.getElementById('hud');
 const currentYearEl = document.getElementById('current-year');
 const eraLabel = document.getElementById('era-label');
+const eraLabelJp = document.getElementById('era-label-jp');
 const memeInfo = document.getElementById('meme-info');
 const activeMemeEl = document.getElementById('active-meme');
 const activeDurEl = document.getElementById('active-duration');
@@ -201,6 +202,15 @@ function getEraLabel(year) {
   if (year <= 2016) return 'THE SOCIAL MEDIA SURGE';
   if (year <= 2020) return 'THE POST-IRONIC ERA';
   return 'THE ALGORITHMIC AGE';
+}
+
+function getEraLabelJp(year) {
+  if (year <= 2004) return '原始のインターネット';
+  if (year <= 2008) return 'バイラル動画の時代';
+  if (year <= 2012) return 'ミーム黄金期';
+  if (year <= 2016) return 'SNS爆発期';
+  if (year <= 2020) return 'ポスト・アイロニーの時代';
+  return 'アルゴリズムの時代';
 }
 
 // ─────────────────────────────────────────────
@@ -765,32 +775,20 @@ function updateMetrics() {
 // ─────────────────────────────────────────────
 // ── Salvage flash text (DOM overlay for visibility) ──
 function showSalvageFlash() {
+  // A quiet archival rite — thin rules, wide tracking, no fireworks
   const flash = document.createElement('div');
-  flash.textContent = '★ SALVAGED ★';
-  flash.style.cssText = `
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%) scale(0.8);
-    font-family: 'Outfit', sans-serif;
-    font-weight: 900;
-    font-size: 3rem;
-    color: #ffcc00;
-    text-shadow: 0 0 40px rgba(255, 200, 0, 0.8), 0 0 80px rgba(255, 150, 0, 0.4);
-    pointer-events: none;
-    z-index: 50;
-    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-    opacity: 0;
+  flash.className = 'salvage-flash';
+  flash.innerHTML = `
+    <div class="sf-word">SALVAGED</div>
+    <div class="sf-sub">永久保存 — PRESERVED IN THE ARCHIVE</div>
   `;
   document.body.appendChild(flash);
-  requestAnimationFrame(() => {
-    flash.style.opacity = '1';
-    flash.style.transform = 'translate(-50%, -50%) scale(1.2)';
-  });
+  requestAnimationFrame(() => flash.classList.add('in'));
   setTimeout(() => {
-    flash.style.opacity = '0';
-    flash.style.transform = 'translate(-50%, -50%) scale(1.5)';
-    setTimeout(() => flash.remove(), 600);
-  }, 800);
+    flash.classList.remove('in');
+    flash.classList.add('out');
+    setTimeout(() => flash.remove(), 900);
+  }, 1400);
 }
 
 const retexturedPanels = [];
@@ -851,23 +849,92 @@ function handleSalvage() {
   // Update UI
   updateMetrics();
 
-  // Chime audio (three notes: success chord)
-  if (audioCtx) {
-    const now = audioCtx.currentTime;
-    [523.25, 659.25, 783.99].forEach((freq, i) => {
-      const osc = audioCtx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + i * 0.08);
-      const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0, now + i * 0.08);
-      g.gain.linearRampToValueAtTime(0.2, now + i * 0.08 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.5);
-      osc.connect(g);
-      g.connect(audioCtx.destination);
-      osc.start(now + i * 0.08);
-      osc.stop(now + i * 0.08 + 0.6);
-    });
+  playSalvageSound();
+}
+
+// ── Salvage sound: an unearthing rite, not a game chime ──
+// Sub-bass thud (the fossil pulled from the stratum), a breath of dust,
+// a slow low-fifth swell, and one distant bell echoing away.
+function playSalvageSound() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const out = audioCtx.createGain();
+  out.gain.value = 1;
+  out.connect(audioCtx.destination);
+
+  // Shared echo space — darkened feedback delay for the tail
+  const delay = audioCtx.createDelay(1.0);
+  delay.delayTime.value = 0.29;
+  const feedback = audioCtx.createGain();
+  feedback.gain.value = 0.34;
+  const damp = audioCtx.createBiquadFilter();
+  damp.type = 'lowpass';
+  damp.frequency.value = 850;
+  delay.connect(feedback); feedback.connect(damp); damp.connect(delay);
+  const wet = audioCtx.createGain();
+  wet.gain.value = 0.4;
+  delay.connect(wet); wet.connect(out);
+
+  // 1) Earth thud — pitch drop into the sub register
+  const thud = audioCtx.createOscillator();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(120, now);
+  thud.frequency.exponentialRampToValueAtTime(36, now + 0.4);
+  const thudG = audioCtx.createGain();
+  thudG.gain.setValueAtTime(0.0001, now);
+  thudG.gain.exponentialRampToValueAtTime(0.45, now + 0.025);
+  thudG.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+  thud.connect(thudG); thudG.connect(out);
+  thud.start(now); thud.stop(now + 0.8);
+
+  // 2) Dust — a short bandpass noise breath sweeping downward
+  const nLen = Math.floor(audioCtx.sampleRate * 0.7);
+  const nBuf = audioCtx.createBuffer(1, nLen, audioCtx.sampleRate);
+  const nd = nBuf.getChannelData(0);
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1);
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = nBuf;
+  const nFilt = audioCtx.createBiquadFilter();
+  nFilt.type = 'bandpass';
+  nFilt.Q.value = 1.1;
+  nFilt.frequency.setValueAtTime(1400, now);
+  nFilt.frequency.exponentialRampToValueAtTime(180, now + 0.55);
+  const nG = audioCtx.createGain();
+  nG.gain.setValueAtTime(0.0001, now);
+  nG.gain.exponentialRampToValueAtTime(0.09, now + 0.03);
+  nG.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+  noise.connect(nFilt); nFilt.connect(nG); nG.connect(out); nG.connect(delay);
+  noise.start(now); noise.stop(now + 0.7);
+
+  // 3) Reliquary swell — low perfect fifth, slow bloom, detuned pairs
+  const swellFilt = audioCtx.createBiquadFilter();
+  swellFilt.type = 'lowpass';
+  swellFilt.frequency.value = 640;
+  const swellG = audioCtx.createGain();
+  swellG.gain.setValueAtTime(0.0001, now + 0.15);
+  swellG.gain.exponentialRampToValueAtTime(0.11, now + 0.9);
+  swellG.gain.exponentialRampToValueAtTime(0.001, now + 3.2);
+  swellFilt.connect(swellG); swellG.connect(out); swellG.connect(delay);
+  for (const f of [110, 110.6, 164.81, 165.6]) {
+    const o = audioCtx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f;
+    const og = audioCtx.createGain();
+    og.gain.value = 0.25;
+    o.connect(og); og.connect(swellFilt);
+    o.start(now + 0.15); o.stop(now + 3.4);
   }
+
+  // 4) One distant bell (D5), mostly heard through the echo
+  const bell = audioCtx.createOscillator();
+  bell.type = 'sine';
+  bell.frequency.value = 587.33;
+  const bellG = audioCtx.createGain();
+  bellG.gain.setValueAtTime(0.0001, now + 0.35);
+  bellG.gain.exponentialRampToValueAtTime(0.045, now + 0.4);
+  bellG.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
+  bell.connect(bellG); bellG.connect(delay); bellG.connect(out);
+  bell.start(now + 0.35); bell.stop(now + 2.4);
 }
 
 salvageBtn.addEventListener('click', handleSalvage);
@@ -1245,6 +1312,7 @@ function animate() {
   const cYear = Math.floor(START_YEAR + progress * TOTAL_YEARS);
   currentYearEl.textContent = cYear;
   eraLabel.textContent = getEraLabel(cYear);
+  eraLabelJp.textContent = getEraLabelJp(cYear);
 
   const PX = 56;
   const rulerOff = -((cYear - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
