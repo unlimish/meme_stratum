@@ -512,26 +512,6 @@ function initThree() {
     }
   }
 
-  // ── Packaging waste layer (2019+) — plastic wrap overlay ──
-  const packagingStartYear = 2019;
-  for (const sm of strataMeshes) {
-    if (sm.year >= packagingStartYear) {
-      const pkgGeo = new THREE.BoxGeometry(12.2, sm.yEnd - sm.yStart, LAYER_Z + 0.2);
-      const pkgMat = new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.08 + (sm.year - packagingStartYear) * 0.02,
-        roughness: 0.1,
-        metalness: 0.0,
-        transmission: 0.4,
-        thickness: 0.5,
-      });
-      const pkgMesh = new THREE.Mesh(pkgGeo, pkgMat);
-      pkgMesh.position.set(0, sm.yStart + (sm.yEnd - sm.yStart) / 2, -STRATA_Z_OFFSET);
-      scene.add(pkgMesh);
-    }
-  }
-
   // ── Factory smoke at the top (Algorithmic Age) ──
   const smokeGeo = new THREE.BufferGeometry();
   const smokePos = new Float32Array(200 * 3);
