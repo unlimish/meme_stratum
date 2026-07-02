@@ -510,6 +510,44 @@ function initThree() {
     }
   }
 
+  // ── Packaging waste layer (2019+) — plastic wrap overlay ──
+  const packagingStartYear = 2019;
+  for (const sm of strataMeshes) {
+    if (sm.year >= packagingStartYear) {
+      const pkgGeo = new THREE.BoxGeometry(12.2, sm.yEnd - sm.yStart, LAYER_Z + 0.2);
+      const pkgMat = new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.08 + (sm.year - packagingStartYear) * 0.02,
+        roughness: 0.1,
+        metalness: 0.0,
+        transmission: 0.4,
+        thickness: 0.5,
+      });
+      const pkgMesh = new THREE.Mesh(pkgGeo, pkgMat);
+      pkgMesh.position.set(0, sm.yStart + (sm.yEnd - sm.yStart) / 2, -STRATA_Z_OFFSET);
+      scene.add(pkgMesh);
+    }
+  }
+
+  // ── Factory smoke at the top (Algorithmic Age) ──
+  const smokeGeo = new THREE.BufferGeometry();
+  const smokePos = new Float32Array(200 * 3);
+  for (let i = 0; i < 200; i++) {
+    smokePos[i * 3] = (Math.random() - 0.5) * 15;
+    smokePos[i * 3 + 1] = currentY + Math.random() * 3;
+    smokePos[i * 3 + 2] = (Math.random() - 0.5) * 8 - STRATA_Z_OFFSET;
+  }
+  smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
+  const smokeParticles = new THREE.Points(smokeGeo, new THREE.PointsMaterial({
+    color: '#888888',
+    size: 0.08,
+    transparent: true,
+    opacity: 0.2,
+    sizeAttenuation: true,
+  }));
+  scene.add(smokeParticles);
+
   // ── Ambient particles ──
   const pg = new THREE.BufferGeometry();
   const pp = new Float32Array(PARTICLE_COUNT * 3);
@@ -966,6 +1004,19 @@ function animate() {
     particles.geometry.attributes.position.needsUpdate = true;
   }
 
+  // ── Packaging layer effect (newer memes = shinier plastic wrap) ──
+  if (closest) {
+    const memeAge = CURRENT_YEAR - closest.data.bornYear;
+    const isNew = memeAge < 3;
+    if (isNew && !state.salvagedMemes.has(closest.data.id)) {
+      // "Fresh packaging" glow
+      closest.baseMat.opacity = THREE.MathUtils.lerp(closest.baseMat.opacity, 1.0, 0.1);
+      // Add slight scale pulse for "consumer appeal"
+      const pulse = 1.0 + Math.sin(t * 3) * 0.02;
+      closest.mesh.scale.setScalar(pulse);
+    }
+  }
+
   // ── Excavation dust ──
   if (dustParticles && state.scrollSpeed > 0.05) {
     const dustArr = dustParticles.geometry.attributes.position.array;
@@ -999,6 +1050,11 @@ function animate() {
 
   updateAudio();
   renderer.render(scene, camera);
+
+  // Glitch overlay responds to consumption velocity
+  if (typeof glitchOverlay !== 'undefined') {
+    glitchOverlay.update(state.scrollSpeed);
+  }
 }
 
 // ── Helper: salvage value calculation (matches test) ──
@@ -1008,7 +1064,114 @@ function calculateSalvageValue(meme, currentYear) {
   return Math.max(0, durability * (1 - age / 20));
 }
 
+// ─────────────────────────────────────────────
+//  GLITCH OVERLAY — consumption velocity burns the screen
+// ─────────────────────────────────────────────
+class GlitchOverlay {
+  constructor() {
+    this.canvas = document.getElementById('glitch-overlay');
+    this.ctx = this.canvas.getContext('2d');
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this.burnIntensity = 0;
+  }
+
+  resize() {
+    this.canvas.width = innerWidth;
+    this.canvas.height = innerHeight;
+  }
+
+  update(scrollSpeed) {
+    this.burnIntensity = Math.max(0, Math.min(1, (scrollSpeed - 0.3) * 2));
+    this.canvas.style.opacity = this.burnIntensity * 0.6;
+
+    if (this.burnIntensity < 0.01) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      return;
+    }
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Glitch scan lines (RGB split)
+    const lineCount = Math.floor(this.burnIntensity * 15);
+    for (let i = 0; i < lineCount; i++) {
+      const y = Math.random() * this.canvas.height;
+      const h = 1 + Math.random() * 4 * this.burnIntensity;
+      const shift = (Math.random() - 0.5) * 30 * this.burnIntensity;
+      const r = Math.random();
+      if (r < 0.33) {
+        this.ctx.fillStyle = `rgba(255, 0, 0, ${0.3 * this.burnIntensity})`;
+      } else if (r < 0.66) {
+        this.ctx.fillStyle = `rgba(0, 255, 0, ${0.2 * this.burnIntensity})`;
+      } else {
+        this.ctx.fillStyle = `rgba(0, 0, 255, ${0.2 * this.burnIntensity})`;
+      }
+      this.ctx.fillRect(0, y, this.canvas.width, h);
+      this.ctx.fillStyle = `rgba(255, 100, 0, ${0.15 * this.burnIntensity})`;
+      this.ctx.fillRect(shift, y + 2, this.canvas.width * 0.3, h);
+    }
+
+    // Screen burn vignette
+    const grad = this.ctx.createRadialGradient(
+      this.canvas.width / 2, this.canvas.height / 2, 0,
+      this.canvas.width / 2, this.canvas.height / 2, this.canvas.width * 0.6
+    );
+    grad.addColorStop(0, 'rgba(255, 80, 0, 0)');
+    grad.addColorStop(1, `rgba(255, 60, 0, ${0.15 * this.burnIntensity})`);
+    this.ctx.fillStyle = grad;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Block noise
+    const blockCount = Math.floor(this.burnIntensity * 8);
+    for (let b = 0; b < blockCount; b++) {
+      const bx = Math.random() * this.canvas.width;
+      const by = Math.random() * this.canvas.height;
+      const bw = 20 + Math.random() * 80;
+      const bh = 10 + Math.random() * 40;
+      this.ctx.fillStyle = `rgba(255, 255, 255, ${0.1 * this.burnIntensity})`;
+      this.ctx.fillRect(bx, by, bw, bh);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  FOMO COUNTER — memes missed while scrolling fast
+// ─────────────────────────────────────────────
+const fomoCounter = document.getElementById('fomo-counter');
+const fomoValue = document.getElementById('fomo-value');
+let fomoCount = 0;
+let lastFomoCheckY = -5;
+const FOMO_THRESHOLD = 0.8;
+
+function updateFOMO() {
+  if (state.scrollSpeed > FOMO_THRESHOLD) {
+    const direction = state.targetY > lastFomoCheckY ? 1 : -1;
+    const distance = Math.abs(state.currentY - lastFomoCheckY);
+    if (distance > K_Y * 0.5) {
+      const memesPassed = memePanels.filter(p => {
+        const py = (p.yStart + p.yEnd) / 2;
+        return (direction > 0 && py > lastFomoCheckY && py <= state.currentY) ||
+               (direction < 0 && py < lastFomoCheckY && py >= state.currentY);
+      }).length;
+      if (memesPassed > 0) {
+        fomoCount += memesPassed;
+        fomoValue.textContent = fomoCount;
+        fomoCounter.classList.remove('hidden');
+        fomoCounter.classList.add('visible');
+        fomoCounter.style.background = 'rgba(200, 30, 30, 0.95)';
+        setTimeout(() => {
+          fomoCounter.style.background = 'rgba(170, 17, 17, 0.85)';
+        }, 200);
+      }
+    }
+  }
+  lastFomoCheckY = state.currentY;
+}
+
+setInterval(updateFOMO, 500);
+
 // ── Init ──
+const glitchOverlay = new GlitchOverlay();
 initThree();
 buildTimeline();
 animate();

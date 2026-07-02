@@ -496,13 +496,59 @@ body, html {
 }
 
 /* ── Glitch/Burn Overlay ── */
-#burn-overlay {
+#glitch-overlay {
   position: fixed;
   inset: 0;
   z-index: 5;
   pointer-events: none;
   opacity: 0;
-  mix-blend-mode: color-dodge;
-  background: radial-gradient(ellipse at center, rgba(255, 100, 0, 0.1), transparent 70%);
-  transition: opacity 0.3s;
+  mix-blend-mode: screen;
+  transition: opacity 0.1s;
+}
+
+/* ── FOMO Counter ── */
+#fomo-counter {
+  position: fixed;
+  top: 30px;
+  right: 30px;
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(170, 17, 17, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 12px 18px;
+  border-radius: 4px;
+  text-align: center;
+  transition: opacity 0.5s, transform 0.3s;
+  transform: translateY(-5px);
+}
+#fomo-counter.hidden {
+  opacity: 0;
+  transform: translateY(-15px);
+}
+#fomo-counter.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fomo-label {
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: rgba(255, 200, 200, 0.8);
+  text-transform: uppercase;
+}
+
+.fomo-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  font-size: 2rem;
+  color: white;
+  line-height: 1;
+  margin: 4px 0;
+}
+
+.fomo-unit {
+  font-size: 0.55rem;
+  color: rgba(255, 200, 200, 0.6);
+  letter-spacing: 0.1em;
 }
