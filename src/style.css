@@ -364,7 +364,7 @@ body, html {
 /* ── Salvage Button ── */
 #salvage-btn {
   position: fixed;
-  bottom: 280px; /* clear above meme-info which can grow tall */
+  bottom: 340px; /* clear above tall meme-info with description */
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;

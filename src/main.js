@@ -419,7 +419,36 @@ function initThree() {
     const strataTex = createStrataTexture(year, memes, ageFactor, densityFactor);
     // ── Year label in 3D space (small floating text near the layer) ──
     const yearLabelY = currentY + layerThickness / 2;
-    // No horizontal lines — year is indicated by fossils alone
+    // ── Cross-section boundary lines (top and bottom edges) ──
+    const edgeGray = Math.round(120 - ageFactor * 40);
+    const edgeColor = new THREE.Color(`rgb(${edgeGray}, ${edgeGray}, ${edgeGray})`);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: edgeColor,
+      transparent: true,
+      opacity: 0.35 + ageFactor * 0.15,
+    });
+    // Top edge
+    const topPts = [
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY + layerThickness, -STRATA_Z_OFFSET - LAYER_Z / 2),
+    ];
+    const topGeo = new THREE.BufferGeometry().setFromPoints(topPts);
+    const topLine = new THREE.Line(topGeo, edgeMat);
+    scene.add(topLine);
+    // Bottom edge
+    const botPts = [
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+      new THREE.Vector3(6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET + LAYER_Z / 2),
+      new THREE.Vector3(-6, currentY, -STRATA_Z_OFFSET - LAYER_Z / 2),
+    ];
+    const botGeo = new THREE.BufferGeometry().setFromPoints(botPts);
+    const botLine = new THREE.Line(botGeo, edgeMat);
+    scene.add(botLine);
 
     // Push dummy strata record for tracking (no visible mesh)
     strataMeshes.push({
