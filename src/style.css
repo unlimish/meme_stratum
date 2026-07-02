@@ -40,12 +40,24 @@ body, html {
 }
 
 /* ── Meme Fullscreen Background ── */
-/* Meme background layers — DISABLED: distracting full-bleed images
- * Strata texture already contains meme color DNA
- * Re-enabled by removing this rule if needed
- */
+/* ── Meme Fullscreen Background (dual-layer cross-fade) ──
+   NOTE: Opacity kept very low (0.08) to avoid obstructing strata view.
+   Strata colors already encode meme DNA via per-year blended colors.
+   These layers provide atmospheric texture without visual noise. */
 #meme-bg-1, #meme-bg-2 {
-  display: none !important;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 1s ease;
+  filter: blur(12px) saturate(0.4);
+  transform: scale(1.05);
+}
+#meme-bg-1.active, #meme-bg-2.active {
+  opacity: 0.08;
 }
 
 /* ── Canvas ── */

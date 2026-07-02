@@ -1018,14 +1018,20 @@ function animate() {
     );
   }
 
-  // ── Meme fullscreen background — DISABLED (distracting, obstructs strata view)
-  // Strata color already encodes meme DNA; no need for full-bleed blur
-  // Keep the activeMeme state tracking without DOM manipulation:
-  if (closest && state.activeMeme !== closest.data) {
-    state.activeMeme = closest.data;
-    // No background image crossfade
-  } else if (!closest && state.activeMeme !== null) {
-    state.activeMeme = null;
+  // ── Meme fullscreen background (very subtle, opacity 0.08) ──
+  if (closest && closest.data.imageUrl) {
+    if (state.activeMeme !== closest.data) {
+      const cur = bgActiveIsFirst ? memeBgEl2 : memeBgEl;
+      const next = bgActiveIsFirst ? memeBgEl : memeBgEl2;
+      cur.classList.remove('active');
+      next.style.backgroundImage = `url(${closest.data.imageUrl})`;
+      void next.offsetWidth;
+      next.classList.add('active');
+      bgActiveIsFirst = !bgActiveIsFirst;
+    }
+  } else {
+    memeBgEl.classList.remove('active');
+    memeBgEl2.classList.remove('active');
   }
 
   // ── Update active meme display ──
