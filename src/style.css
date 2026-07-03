@@ -773,6 +773,50 @@ body.cursor-hidden, body.cursor-hidden * {
   background-position: center;
   opacity: 0.7;
   position: relative;
+  transition: transform 0.25s, opacity 0.25s;
+  cursor: default;
+}
+.collection-item:hover {
+  opacity: 1;
+  transform: scale(1.12);
+}
+
+/* Shared tooltip: fossil epitaph on hover */
+#report-tooltip {
+  position: fixed;
+  z-index: 320;
+  max-width: 320px;
+  background: rgba(26, 20, 16, 0.97);
+  border: 1px solid rgba(255, 204, 102, 0.35);
+  border-left: 3px solid #ffcc66;
+  border-radius: 4px;
+  padding: 12px 16px;
+  text-align: left;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+#report-tooltip.hidden {
+  opacity: 0;
+}
+.rt-name {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--fg);
+  letter-spacing: 0.05em;
+}
+.rt-meta {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: #ffcc66;
+  margin: 4px 0 8px;
+}
+.rt-desc {
+  font-family: 'Inter', sans-serif;
+  font-weight: 300;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: rgba(232, 224, 216, 0.85);
 }
 .collection-item::after {
   content: attr(data-rarity);
@@ -920,11 +964,22 @@ body.cursor-hidden, body.cursor-hidden * {
   gap: 48px;
   align-items: center;
 }
+#share-overlay .share-content {
+  transform: translateY(16px);
+  opacity: 0;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s, opacity 0.6s 0.1s;
+}
+#share-overlay:not(.hidden) .share-content {
+  transform: translateY(0);
+  opacity: 1;
+}
 
 #share-card {
-  height: min(82vh, 920px);
-  width: auto;
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  /* Width-driven so the card + QR column always fit side by side;
+     64.2vh ≈ 82vh × (900/1150) keeps the old height cap */
+  width: min(58vw, 720px, 64.2vh);
+  height: auto;
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 204, 102, 0.15);
 }
 
 .share-side {
@@ -936,28 +991,56 @@ body.cursor-hidden, body.cursor-hidden * {
   text-align: center;
 }
 
-.share-caption {
+.share-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+.ss-item {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: flex-start;
+}
+.ss-item > div {
   font-family: 'Inter', sans-serif;
   font-weight: 300;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--fg);
 }
-.share-caption span {
+.ss-item > div span {
   display: block;
-  margin-top: 6px;
+  margin-top: 3px;
   font-size: 0.55rem;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.22em;
   color: rgba(232, 224, 216, 0.4);
+}
+.ss-num {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 204, 102, 0.6);
+  border-radius: 50%;
+  color: #ffcc66;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+}
+
+.share-qr-frame {
+  background: #e8e0d8;
+  padding: 12px;
+  border-radius: 6px;
+  line-height: 0;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
 #share-qr {
   border-radius: 4px;
-}
-
-.share-qr-label {
-  font-size: 0.6rem;
-  color: rgba(232, 224, 216, 0.45);
-  line-height: 1.6;
 }
 
 #share-close {

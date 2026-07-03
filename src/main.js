@@ -1196,6 +1196,7 @@ function enterAttract() {
   resetSession();
   state.mode = 'attract';
   reportPanel.classList.add('hidden');
+  hideReportTooltip();
   document.getElementById('share-overlay').classList.add('hidden');
   overlay.classList.remove('hidden');
   hud.classList.add('hidden');
@@ -1789,6 +1790,33 @@ function updateFOMO() {
 
 setInterval(updateFOMO, 500);
 
+// ── Report tooltip: hover a salvaged fossil → its description ──
+const reportTooltip = document.getElementById('report-tooltip');
+
+function showReportTooltip(item, meme) {
+  reportTooltip.innerHTML =
+    `<div class="rt-name">${meme.name}</div>` +
+    `<div class="rt-meta">${meme.bornYear} — ${meme.diedYear} · ${getRarity(meme)}</div>` +
+    `<div class="rt-desc">${meme.description || ''}</div>`;
+  const rect = item.getBoundingClientRect();
+  // Measure while invisible, then place centered above the item (10px gap),
+  // clamped horizontally to the viewport with 12px padding
+  reportTooltip.style.left = '0px';
+  reportTooltip.style.top = '0px';
+  const tw = reportTooltip.offsetWidth;
+  const th = reportTooltip.offsetHeight;
+  let left = rect.left + rect.width / 2 - tw / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - tw - 12));
+  const top = Math.max(12, rect.top - th - 10);
+  reportTooltip.style.left = left + 'px';
+  reportTooltip.style.top = top + 'px';
+  reportTooltip.classList.remove('hidden');
+}
+
+function hideReportTooltip() {
+  reportTooltip.classList.add('hidden');
+}
+
 // ── Consumption Report ──
 function showConsumptionReport() {
   if (state.mode === 'report') return;
@@ -1854,6 +1882,7 @@ function showConsumptionReport() {
     narrative = 'You curated a balanced history. Neither spectacle nor eternity — just human memory.';
   }
   document.getElementById('report-desc').textContent = narrative;
+  state.lastNarrative = narrative;
 
   // Collection grid
   const grid = document.getElementById('report-collection');
@@ -1865,6 +1894,9 @@ function showConsumptionReport() {
     item.className = 'collection-item';
     item.style.backgroundImage = `url(${meme.imageUrl})`;
     item.setAttribute('data-rarity', getRarity(meme));
+    // Hovering a fossil reveals its epitaph (shared fixed tooltip)
+    item.addEventListener('mouseenter', () => showReportTooltip(item, meme));
+    item.addEventListener('mouseleave', hideReportTooltip);
     grid.appendChild(item);
   }
 
@@ -1884,6 +1916,7 @@ function showConsumptionReport() {
 function hideConsumptionReport() {
   if (state.mode !== 'report') return;
   reportPanel.classList.add('hidden');
+  hideReportTooltip();
   resetSession();
   state.mode = 'active';
   // Rewind to the bottom; the long glide back through the strata is the transition
@@ -1914,7 +1947,7 @@ function loadImageSafe(src) {
   });
 }
 
-async function renderShareCard(canvas, salvagedList) {
+async function renderShareCard(canvas, salvagedList, narrative = '') {
   const W = 900, H = 1150, SCALE = 2;
   canvas.width = W * SCALE;
   canvas.height = H * SCALE;
@@ -1958,7 +1991,7 @@ async function renderShareCard(canvas, salvagedList) {
 
   ctx.font = '16px Inter, sans-serif';
   ctx.fillStyle = 'rgba(232,224,216,0.5)';
-  ctx.fillText('ミームの地層 — 発掘証明書', W / 2, 165);
+  ctx.fillText('ミームの地層 — 発掘証明書 / EXCAVATION CERTIFICATE', W / 2, 165);
 
   // Gold rule
   ctx.strokeStyle = 'rgba(255,204,102,0.55)';
@@ -1979,8 +2012,8 @@ async function renderShareCard(canvas, salvagedList) {
   ctx.fillStyle = '#ffcc66';
   ctx.fillText(state.visitorName || '—', W / 2, 280);
 
-  // Fossil tiles
-  const TILE = 140, GAP = 18;
+  // Fossil tiles — 150px, 5 across, centered as a group
+  const TILE = 150, GAP = 16;
   const n = salvagedList.length;
   const totalW = n * TILE + (n - 1) * GAP;
   const startX = (W - totalW) / 2;
@@ -2031,27 +2064,83 @@ async function renderShareCard(canvas, salvagedList) {
     if (name !== meme.name && name.length > 1) name = name.slice(0, -1) + '…';
     ctx.fillText(name, x + TILE / 2, y + TILE + 16);
 
+    // Lifespan
+    ctx.font = '9px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(232,224,216,0.5)';
+    ctx.fillText(`${meme.bornYear}–${meme.diedYear}`, x + TILE / 2, y + TILE + 30);
+
     // Rarity
     const rarity = getRarity(meme);
     ctx.font = '9px Inter, sans-serif';
     ctx.fillStyle = rarityColor(rarity);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0.15em';
-    ctx.fillText(rarity, x + TILE / 2, y + TILE + 30);
+    ctx.fillText(rarity, x + TILE / 2, y + TILE + 44);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   }
 
-  // Score / rank
+  // Score block — small label, big number, rank
   const score = calculateCurationScore(salvagedList);
   const rank = getCurationRank(score.total);
-  const scoreY = tileY + TILE + 70;
-  ctx.font = '700 22px Outfit, sans-serif';
-  ctx.fillStyle = '#e8e0d8';
-  ctx.fillText(`CURATION SCORE ${score.total}  ·  RANK ${rank}`, W / 2, scoreY);
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(232,224,216,0.45)';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.25em';
+  ctx.fillText('CURATION SCORE', W / 2, 630);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
+  ctx.font = '700 64px Outfit, sans-serif';
+  ctx.fillStyle = '#ffcc66';
+  ctx.fillText(String(score.total), W / 2, 700);
+
+  ctx.font = '16px Inter, sans-serif';
+  ctx.fillStyle = '#e8e0d8';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.2em';
+  ctx.fillText(`RANK ${rank}`, W / 2, 735);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+
+  // Narrative — the report's verdict, word-wrapped and centered
+  if (narrative) {
+    ctx.font = 'italic 300 15px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(232,224,216,0.6)';
+    const maxW = 640;
+    const words = narrative.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, 800 + i * 24));
+  }
+
+  // Date
   ctx.font = '12px Inter, sans-serif';
   ctx.fillStyle = 'rgba(232,224,216,0.45)';
   const dateStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
-  ctx.fillText(dateStr, W / 2, scoreY + 30);
+  ctx.fillText(dateStr, W / 2, 880);
+
+  // Strata band — a quiet echo of the geological piece
+  const strataColors = [];
+  const fillers = ['#443322', '#8a8078'];
+  for (let i = 0; i < 7; i++) {
+    const memeColor = salvagedList[i % Math.max(1, salvagedList.length)]?.color;
+    strataColors.push(i % 2 === 0 && memeColor ? memeColor : fillers[i % fillers.length]);
+  }
+  ctx.save();
+  ctx.globalAlpha = 0.28;
+  let strataY = 940;
+  for (let i = 0; i < 7; i++) {
+    const h = 3 + ((i * 7) % 4); // 3–6px
+    ctx.fillStyle = strataColors[i];
+    ctx.fillRect(60, strataY, W - 120, h);
+    strataY += h + 10 + ((i * 5) % 5); // 10–14px gaps
+  }
+  ctx.restore();
 
   // Footer
   ctx.font = '11px Inter, sans-serif';
@@ -2063,7 +2152,7 @@ async function openShareOverlay() {
   const salvagedList = Array.from(state.salvagedMemes)
     .map(id => memeData.find(m => m.id === id)).filter(Boolean);
 
-  await renderShareCard(shareCardCanvas, salvagedList);
+  await renderShareCard(shareCardCanvas, salvagedList, state.lastNarrative || '');
   shareOverlay.classList.remove('hidden');
 
   const score = calculateCurationScore(salvagedList);
