@@ -6,8 +6,8 @@
     <title>Meme Stratum — ミームの地層</title>
     <!-- Fonts are bundled locally: the piece must survive without network -->
     <link rel="stylesheet" href="/fonts/fonts.css" />
-    <script type="module" crossorigin src="/assets/index-CSiSTXs3.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BlpTmV0V.css">
+    <script type="module" crossorigin src="/assets/index-Cu3KoVcK.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BJWnv5xl.css">
   </head>
   <body>
     <!-- Meme Fullscreen Background (two layers for cross-fade) -->
@@ -154,7 +154,21 @@
           <div class="collection-title">HALL OF DIGGERS (スコアボード)</div>
           <div id="scoreboard-list"></div>
         </div>
+        <button id="share-btn" class="hidden">発掘証明書を表示 / SHARE →</button>
         <button id="report-close">EXCAVATE AGAIN →</button>
+      </div>
+    </div>
+
+    <!-- Share overlay: excavation certificate + QR -->
+    <div id="share-overlay" class="hidden">
+      <div class="share-content">
+        <canvas id="share-card"></canvas>
+        <div class="share-side">
+          <div class="share-caption">スマホで画面を撮影してシェア<span>PHOTOGRAPH THIS CARD &amp; POST IT</span></div>
+          <canvas id="share-qr"></canvas>
+          <div class="share-qr-label">QRを読むと文面入りでXの投稿画面が開きます</div>
+          <button id="share-close">← BACK TO REPORT</button>
+        </div>
       </div>
     </div>
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import QRCode from 'qrcode';
 import { memeData, getRarity, getGrade, calculateCurationScore, getCurationRank } from './memeData.js';
 
 // Dev guard: if this module is re-executed on a live page (vite HMR re-import),
@@ -981,6 +982,11 @@ window.addEventListener('keydown', e => {
     handleSalvage();
   }
   if (e.key === 'Escape') {
+    const shareOverlayEl = document.getElementById('share-overlay');
+    if (!shareOverlayEl.classList.contains('hidden')) {
+      shareOverlayEl.classList.add('hidden');
+      return;
+    }
     if (state.mode === 'report') {
       hideConsumptionReport();
     } else if (state.mode === 'active' && state.totalMemesConsumed >= 1) {
@@ -1190,6 +1196,7 @@ function enterAttract() {
   resetSession();
   state.mode = 'attract';
   reportPanel.classList.add('hidden');
+  document.getElementById('share-overlay').classList.add('hidden');
   overlay.classList.remove('hidden');
   hud.classList.add('hidden');
   memeInfo.classList.add('hidden');
@@ -1870,6 +1877,7 @@ function showConsumptionReport() {
   }
 
   reportPanel.classList.remove('hidden');
+  document.getElementById('share-btn').classList.toggle('hidden', state.salvagedMemes.size === 0);
 }
 
 // "EXCAVATE AGAIN" — a visitor is still here: reset and hand them a fresh dig
@@ -1884,6 +1892,191 @@ function hideConsumptionReport() {
 }
 
 reportCloseBtn.addEventListener('click', hideConsumptionReport);
+
+// ─────────────────────────────────────────────
+//  SHARE FLOW — 発掘証明書 (Excavation Certificate)
+//  Kiosk has no SNS login: certificate is rendered BIG so visitors can
+//  photograph it, plus a QR code opening a pre-filled X compose intent.
+// ─────────────────────────────────────────────
+const shareOverlay = document.getElementById('share-overlay');
+const shareBtn = document.getElementById('share-btn');
+const shareCloseBtn = document.getElementById('share-close');
+const shareCardCanvas = document.getElementById('share-card');
+const shareQrCanvas = document.getElementById('share-qr');
+
+function loadImageSafe(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+async function renderShareCard(canvas, salvagedList) {
+  const W = 900, H = 1150, SCALE = 2;
+  canvas.width = W * SCALE;
+  canvas.height = H * SCALE;
+  // Display size is handled by CSS (#share-card: height min(82vh, 920px)) so
+  // the certificate always fits the screen; only the aspect ratio is fixed here
+  canvas.style.aspectRatio = `${W} / ${H}`;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+
+  // Background
+  ctx.fillStyle = '#12100d';
+  ctx.fillRect(0, 0, W, H);
+
+  // Paper-of-darkness noise
+  const imgData = ctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (Math.random() < 0.04) {
+      const a = Math.random() * 0.03 * 255;
+      d[i] = Math.min(255, d[i] + a);
+      d[i + 1] = Math.min(255, d[i + 1] + a);
+      d[i + 2] = Math.min(255, d[i + 2] + a);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Double rule border
+  ctx.strokeStyle = 'rgba(255,204,102,0.55)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(28, 28, W - 56, H - 56);
+  ctx.strokeStyle = 'rgba(255,204,102,0.3)';
+  ctx.strokeRect(36, 36, W - 72, H - 72);
+
+  // Header
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e8e0d8';
+  ctx.font = '300 54px Outfit, sans-serif';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.35em';
+  ctx.fillText('MEME STRATUM', W / 2 + 20, 130);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+
+  ctx.font = '16px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(232,224,216,0.5)';
+  ctx.fillText('ミームの地層 — 発掘証明書', W / 2, 165);
+
+  // Gold rule
+  ctx.strokeStyle = 'rgba(255,204,102,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - 100, 190);
+  ctx.lineTo(W / 2 + 100, 190);
+  ctx.stroke();
+
+  // Digger ID
+  ctx.font = '11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(232,224,216,0.45)';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.2em';
+  ctx.fillText('DIGGER ID', W / 2, 235);
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+
+  ctx.font = '700 34px Outfit, sans-serif';
+  ctx.fillStyle = '#ffcc66';
+  ctx.fillText(state.visitorName || '—', W / 2, 280);
+
+  // Fossil tiles
+  const TILE = 140, GAP = 18;
+  const n = salvagedList.length;
+  const totalW = n * TILE + (n - 1) * GAP;
+  const startX = (W - totalW) / 2;
+  const tileY = 330;
+
+  const images = await Promise.all(salvagedList.map(m => m.imageUrl ? loadImageSafe(m.imageUrl) : Promise.resolve(null)));
+
+  const rarityColor = (r) => ({
+    MYTHIC: '#ffcc66',
+    RARE: '#cc99ff',
+    UNCOMMON: '#88aacc',
+    DISPOSABLE: 'rgba(232,224,216,0.4)',
+  }[r] || 'rgba(232,224,216,0.4)');
+
+  for (let i = 0; i < n; i++) {
+    const meme = salvagedList[i];
+    const img = images[i];
+    const x = startX + i * (TILE + GAP);
+    const y = tileY;
+
+    if (img) {
+      const a = img.width / img.height;
+      let sx, sy, sw, sh;
+      if (a > 1) {
+        sh = img.height; sw = img.height;
+        sx = (img.width - sw) / 2; sy = 0;
+      } else {
+        sw = img.width; sh = img.width;
+        sx = 0; sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, x, y, TILE, TILE);
+    } else {
+      ctx.fillStyle = (meme.color || '#888888') + '55';
+      ctx.fillRect(x, y, TILE, TILE);
+    }
+
+    ctx.strokeStyle = 'rgba(232,224,216,0.25)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
+
+    // Name (ellipsized to tile width)
+    ctx.font = '10px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(232,224,216,0.8)';
+    let name = meme.name || '';
+    while (ctx.measureText(name).width > TILE - 6 && name.length > 1) {
+      name = name.slice(0, -1);
+    }
+    if (name !== meme.name && name.length > 1) name = name.slice(0, -1) + '…';
+    ctx.fillText(name, x + TILE / 2, y + TILE + 16);
+
+    // Rarity
+    const rarity = getRarity(meme);
+    ctx.font = '9px Inter, sans-serif';
+    ctx.fillStyle = rarityColor(rarity);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0.15em';
+    ctx.fillText(rarity, x + TILE / 2, y + TILE + 30);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  }
+
+  // Score / rank
+  const score = calculateCurationScore(salvagedList);
+  const rank = getCurationRank(score.total);
+  const scoreY = tileY + TILE + 70;
+  ctx.font = '700 22px Outfit, sans-serif';
+  ctx.fillStyle = '#e8e0d8';
+  ctx.fillText(`CURATION SCORE ${score.total}  ·  RANK ${rank}`, W / 2, scoreY);
+
+  ctx.font = '12px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(232,224,216,0.45)';
+  const dateStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+  ctx.fillText(dateStr, W / 2, scoreY + 30);
+
+  // Footer
+  ctx.font = '11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(232,224,216,0.35)';
+  ctx.fillText('消費完了報告書 · 53体のうち5体だけが記憶される · #MemeStratum', W / 2, H - 50);
+}
+
+async function openShareOverlay() {
+  const salvagedList = Array.from(state.salvagedMemes)
+    .map(id => memeData.find(m => m.id === id)).filter(Boolean);
+
+  await renderShareCard(shareCardCanvas, salvagedList);
+  shareOverlay.classList.remove('hidden');
+
+  const score = calculateCurationScore(salvagedList);
+  const rank = getCurationRank(score.total);
+  const names = salvagedList.map(m => m.name).join(', ');
+  const text = `MEME STRATUM — 発掘報告\nDIGGER: ${state.visitorName}\n永久保存: ${names}\nSCORE ${score.total} / RANK ${rank}\n#MemeStratum`;
+  const url = 'https://x.com/intent/post?text=' + encodeURIComponent(text);
+  // Standard dark-on-light modules: inverted QRs fail on many phone scanners
+  QRCode.toCanvas(shareQrCanvas, url, { width: 200, margin: 2, color: { dark: '#12100d', light: '#e8e0d8' } });
+}
+
+shareBtn.addEventListener('click', openShareOverlay);
+shareCloseBtn.addEventListener('click', () => shareOverlay.classList.add('hidden'));
 
 // ── Init ──
 const glitchOverlay = new GlitchOverlay();
