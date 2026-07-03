@@ -141,6 +141,17 @@ const strataMeshes = [];
 const memePanels = [];
 const veinMeshes = [];
 
+// Resolve asset paths against the page origin so images load whether the app is
+// served from root, a subdirectory, or a static host with a <base> tag.
+function assetUrl(path) {
+  if (!path) return path;
+  if (/^https?:\/\//.test(path) || path.startsWith('data:')) return path;
+  const base = document.querySelector('base')?.getAttribute('href') || '/';
+  const cleanBase = base.endsWith('/') ? base : base + '/';
+  const cleanPath = path.replace(/^\/+/, '');
+  return new URL(cleanPath, new URL(cleanBase, location.href)).href;
+}
+
 // Audio
 let audioCtx, droneOsc, subOsc, filterNode, gainNode, noiseNode, noiseGain;
 
@@ -467,7 +478,7 @@ function createFossilTexture(meme, ageFactor, isSalvaged) {
     im.onerror = () => {
       if (meme.remoteUrl && im.src !== meme.remoteUrl) im.src = meme.remoteUrl;
     };
-    im.src = meme.imageUrl;
+    im.src = assetUrl(meme.imageUrl);
   }
   return tex;
 }
@@ -1400,7 +1411,7 @@ function animate() {
       const cur = bgActiveIsFirst ? memeBgEl2 : memeBgEl;
       const next = bgActiveIsFirst ? memeBgEl : memeBgEl2;
       cur.classList.remove('active');
-      next.style.backgroundImage = `url(${closest.data.imageUrl})`;
+      next.style.backgroundImage = `url(${assetUrl(closest.data.imageUrl)})`;
       void next.offsetWidth;
       next.classList.add('active');
       bgActiveIsFirst = !bgActiveIsFirst;
@@ -1892,7 +1903,7 @@ function showConsumptionReport() {
     if (!meme) continue;
     const item = document.createElement('div');
     item.className = 'collection-item';
-    item.style.backgroundImage = `url(${meme.imageUrl})`;
+    item.style.backgroundImage = `url(${assetUrl(meme.imageUrl)})`;
     item.setAttribute('data-rarity', getRarity(meme));
     // Hovering a fossil reveals its epitaph (shared fixed tooltip)
     item.addEventListener('mouseenter', () => showReportTooltip(item, meme));
@@ -2019,7 +2030,7 @@ async function renderShareCard(canvas, salvagedList, narrative = '') {
   const startX = (W - totalW) / 2;
   const tileY = 330;
 
-  const images = await Promise.all(salvagedList.map(m => m.imageUrl ? loadImageSafe(m.imageUrl) : Promise.resolve(null)));
+  const images = await Promise.all(salvagedList.map(m => m.imageUrl ? loadImageSafe(assetUrl(m.imageUrl)) : Promise.resolve(null)));
 
   const rarityColor = (r) => ({
     MYTHIC: '#ffcc66',

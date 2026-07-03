@@ -660,9 +660,54 @@ body.cursor-hidden, body.cursor-hidden * {
 
 .report-content {
   text-align: center;
-  max-width: 600px;
-  width: 90%;
+  max-width: 1100px;
+  width: 92%;
   padding: 40px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto auto auto auto;
+  gap: 24px 40px;
+  align-items: start;
+}
+
+.report-title,
+.report-sub,
+.report-stats,
+.report-grade,
+.report-rank,
+.report-desc,
+.report-forgotten,
+.report-scoreboard,
+.report-actions {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  .report-stats {
+    grid-column: 1 / 2;
+    grid-row: 3 / 6;
+  }
+  .report-collection {
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+    margin-bottom: 0;
+  }
+  .report-scoreboard {
+    grid-column: 2 / 3;
+    grid-row: 4 / 6;
+  }
+  .report-grade,
+  .report-rank,
+  .report-desc,
+  .report-forgotten {
+    grid-column: 1 / -1;
+  }
+  .report-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+  }
 }
 
 .report-title {
@@ -759,10 +804,10 @@ body.cursor-hidden, body.cursor-hidden * {
 }
 
 .collection-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 10px;
+  justify-items: center;
 }
 
 .collection-item {
@@ -924,8 +969,7 @@ body.cursor-hidden, body.cursor-hidden * {
 }
 
 #share-btn {
-  display: block;
-  margin: 0 auto 14px;
+  display: inline-block;
   background: transparent;
   border: 1px solid rgba(255, 204, 102, 0.5);
   padding: 12px 36px;
@@ -939,6 +983,10 @@ body.cursor-hidden, body.cursor-hidden * {
 }
 #share-btn:hover {
   background: rgba(255, 204, 102, 0.12);
+}
+
+.report-actions {
+  margin-top: 1rem;
 }
 
 /* ── Share overlay: excavation certificate + QR ── */
