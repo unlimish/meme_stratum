@@ -37,6 +37,7 @@ body, html {
   touch-action: none;
   background: var(--bg);
   font-family: 'Inter', 'Outfit', -apple-system, sans-serif;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
 }
@@ -248,7 +249,7 @@ body.cursor-hidden, body.cursor-hidden * {
 /* ── Consumption Metrics Panel (Industrial/Satirical) ── */
 #metrics-panel {
   position: fixed;
-  top: 30px;
+  top: calc(30px + env(safe-area-inset-top, 0px));
   left: 30px;
   z-index: 20;
   pointer-events: none;
@@ -412,7 +413,7 @@ body.cursor-hidden, body.cursor-hidden * {
 /* ── Active Meme Info (bottom stack, above the timeline ruler) ── */
 #meme-info {
   position: fixed;
-  bottom: 76px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
@@ -578,7 +579,7 @@ body.cursor-hidden, body.cursor-hidden * {
 /* ── Timeline (pinned to the very bottom, below the meme-info stack) ── */
 #timeline-wrapper {
   position: fixed;
-  bottom: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 70%;
@@ -1243,7 +1244,7 @@ body.cursor-hidden, body.cursor-hidden * {
 /* ── Auto-excavation indicator ── */
 #auto-indicator {
   position: fixed;
-  bottom: 30px;
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px));
   right: 30px;
   z-index: 20;
   display: flex;
