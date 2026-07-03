@@ -146,10 +146,8 @@ const veinMeshes = [];
 function assetUrl(path) {
   if (!path) return path;
   if (/^https?:\/\//.test(path) || path.startsWith('data:')) return path;
-  const base = document.querySelector('base')?.getAttribute('href') || '/';
-  const cleanBase = base.endsWith('/') ? base : base + '/';
   const cleanPath = path.replace(/^\/+/, '');
-  return new URL(cleanPath, new URL(cleanBase, location.href)).href;
+  return new URL(cleanPath, location.href).href;
 }
 
 // Audio
