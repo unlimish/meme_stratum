@@ -109,7 +109,6 @@ const serialDot = document.getElementById('serial-dot');
 const serialStatus = document.getElementById('serial-status');
 const serialIndicator = document.getElementById('serial-indicator');
 const webglCanvas = document.getElementById('webgl');
-let motionBlurCanvas, motionBlurCtx;
 const timelineWrapper = document.getElementById('timeline-wrapper');
 const timelineRuler = document.getElementById('timeline-ruler');
 // Satirical DOM elements
@@ -515,20 +514,9 @@ function initThree() {
   renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, alpha: true });
   renderer.setClearColor(0x000000, 0);
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
-
-  // Post-process motion blur: a persistent low-opacity after-image canvas
-  // composited behind the HUD but in front of the 3D scene.  Much cheaper
-  // than a full-screen shader and masks the stutter on lower-end GPUs.
-  motionBlurCanvas = document.createElement('canvas');
-  motionBlurCanvas.id = 'motion-blur-canvas';
-  motionBlurCanvas.style.cssText = 'position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0.50;';
-  document.body.insertBefore(motionBlurCanvas, document.getElementById('webgl').nextSibling);
-  motionBlurCanvas.width = webglCanvas.width;
-  motionBlurCanvas.height = webglCanvas.height;
-  motionBlurCtx = motionBlurCanvas.getContext('2d');
 
   scene.add(new THREE.AmbientLight('#f0e8e0', 0.6));
   const dir = new THREE.DirectionalLight('#ffe0c0', 0.7);
@@ -1608,18 +1596,6 @@ function animate() {
 
   updateAudio();
   renderer.render(scene, camera);
-
-  // Motion blur: composite the current frame onto a persistent low-opacity
-  // 2D canvas.  The faster we scroll, the more the previous frames smear.
-  if (motionBlurCtx && state.scrollSpeed > 0.02) {
-    const fade = Math.max(0.75, 1 - state.scrollSpeed * 0.35);
-    motionBlurCtx.globalCompositeOperation = 'source-over';
-    motionBlurCtx.fillStyle = `rgba(0,0,0,${1 - fade})`;
-    motionBlurCtx.fillRect(0, 0, motionBlurCanvas.width, motionBlurCanvas.height);
-    motionBlurCtx.drawImage(webglCanvas, 0, 0);
-  } else if (motionBlurCtx) {
-    motionBlurCtx.clearRect(0, 0, motionBlurCanvas.width, motionBlurCanvas.height);
-  }
 
   // Glitch overlay responds to consumption velocity — only while a visitor drives
   if (typeof glitchOverlay !== 'undefined') {
