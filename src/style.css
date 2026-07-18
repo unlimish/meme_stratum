@@ -1329,3 +1329,40 @@ body.cursor-hidden, body.cursor-hidden * {
   color: rgba(255, 200, 200, 0.6);
   letter-spacing: 0.1em;
 }
+
+/* ── perf-lite (5K-class kiosk screens) ──
+   backdrop-filter blur is by far the costliest paint on a high-dpi canvas
+   fullscreen behind it; drop it and compensate with a more opaque solid
+   background so text over the strata stays legible. */
+body.perf-lite #overlay {
+  backdrop-filter: none;
+  background: rgba(18, 16, 13, 0.92);
+}
+body.perf-lite .metric {
+  backdrop-filter: none;
+  background: rgba(26, 20, 16, 0.85);
+}
+body.perf-lite #ambient-metrics {
+  backdrop-filter: none;
+  background: rgba(26, 20, 16, 0.85);
+}
+body.perf-lite #consumption-report {
+  backdrop-filter: none;
+  background: rgba(26, 20, 16, 0.97);
+}
+body.perf-lite #share-overlay {
+  backdrop-filter: none;
+  background: rgba(18, 16, 13, 0.99);
+}
+body.perf-lite #auto-indicator {
+  backdrop-filter: none;
+  background: rgba(26, 20, 16, 0.85);
+}
+body.perf-lite #fomo-counter {
+  backdrop-filter: none;
+  background: rgba(170, 17, 17, 0.95);
+}
+body.perf-lite #meme-bg-1,
+body.perf-lite #meme-bg-2 {
+  filter: blur(6px) saturate(0.4);
+}

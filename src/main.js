@@ -37,6 +37,25 @@ const TOTAL_YEARS = CURRENT_YEAR - START_YEAR;
 const CONSUMPTION_LIMIT = 200;
 const SALVAGE_CAPACITY_MAX = 5;
 
+// ── Performance: render-resolution budget ──
+// 5K Retina screens push far more render pixels than the piece needs to read
+// well from a few feet away; cap it and let the adaptive controller (see
+// animate()) trim further at runtime if frames are still dropping.
+const MAX_RENDER_PIXELS = 4.2e6;
+let renderScale = 1; // adaptive quality knob, 0.6–1.0 in steps of 0.1
+let basePixelRatio = 1;
+function computeBasePixelRatio() {
+  return Math.min(devicePixelRatio, 2, Math.sqrt(MAX_RENDER_PIXELS / (innerWidth * innerHeight)));
+}
+
+// perf-lite: on 5K-class kiosk displays, drop the costliest CSS effects
+// (backdrop blur) where they're least noticeable at viewing distance.
+// ?perf=lite forces it on, ?perf=full forces it off (for on-site A/B checks).
+const perfParam = new URLSearchParams(location.search).get('perf');
+const PERF_LITE = perfParam === 'lite' || (perfParam !== 'full' &&
+  devicePixelRatio >= 2 && Math.max(screen.width, screen.height) * devicePixelRatio >= 4000);
+if (PERF_LITE) document.body.classList.add('perf-lite');
+
 // ── State ──
 // mode drives the exhibition loop:
 //   attract — title overlay over a slowly drifting scene, waiting for a visitor
@@ -130,6 +149,8 @@ const curationRankEl = document.getElementById('curation-rank');
 const focusLineEl = document.getElementById('focus-line');
 const focusDotEl = document.getElementById('focus-dot');
 const accentEl = document.getElementById('active-accent');
+const cmListEl = document.getElementById('cm-list');
+const cmContainerEl = document.getElementById('contemporary-memes');
 
 // ── Three.js ──
 let scene, camera, renderer;
@@ -520,10 +541,17 @@ function initThree() {
   camera.position.set(0, -5, 18);
   camera.lookAt(0, 0, 0);
 
-  renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, alpha: true });
+  renderer = new THREE.WebGLRenderer({
+    canvas: webglCanvas,
+    // MSAA only pays off on low-dpi screens; high-dpi is dense enough without it
+    antialias: devicePixelRatio <= 1,
+    alpha: true,
+    powerPreference: 'high-performance',
+  });
   renderer.setClearColor(0x000000, 0);
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  basePixelRatio = computeBasePixelRatio();
+  renderer.setPixelRatio(basePixelRatio * renderScale);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.85;
 
@@ -715,12 +743,20 @@ function initThree() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    basePixelRatio = computeBasePixelRatio();
+    renderer.setPixelRatio(basePixelRatio * renderScale);
+    cachedMemeInfoRect = null; // force a fresh measurement next frame
   });
 }
 
 // ─────────────────────────────────────────────
 //  TIMELINE RULER
 // ─────────────────────────────────────────────
+// Populated by buildTimeline(), read every frame in animate() — cached once
+// instead of a document.querySelectorAll('.timeline-year-text') per frame.
+const tickYearEls = new Map();
+let lastRenderedYear = null;
+
 function buildTimeline() {
   const PX = 56;
   for (let y = START_YEAR; y <= CURRENT_YEAR; y++) {
@@ -737,6 +773,7 @@ function buildTimeline() {
       lbl.textContent = y;
       lbl.style.left = off + 'px';
       timelineRuler.appendChild(lbl);
+      tickYearEls.set(y, lbl);
     }
   }
 }
@@ -744,39 +781,67 @@ function buildTimeline() {
 // ─────────────────────────────────────────────
 //  SATIRICAL METRICS
 // ─────────────────────────────────────────────
+// Cache of last-applied DOM values so updateMetrics() only writes when
+// something actually changed (getBoundingClientRect/style writes force layout).
+const lastMetricsRender = { velocity: null, velPercent: null, velClass: null, warnDisplay: null, salvageState: null };
+
 function updateMetrics() {
-  // Consumption velocity: memes per second approximation
-  const memesInView = memePanels.filter(p => {
-    const dist = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
-    return dist < K_Y * 2;
-  }).length;
-  state.consumptionVelocity = state.scrollSpeed * memesInView * 0.3;
+  // Consumption velocity: memes per second approximation. memesInViewCount is
+  // computed once per frame in the animate() highlight loop (same distance
+  // scan) and shared here instead of re-filtering memePanels.
+  state.consumptionVelocity = state.scrollSpeed * memesInViewCount * 0.3;
   state.totalConsumption += state.consumptionVelocity;
 
-  // Update DOM
-  velocityEl.textContent = state.consumptionVelocity.toFixed(1);
+  // Update DOM — guarded so unchanged values never force a style/layout write
+  const velText = state.consumptionVelocity.toFixed(1);
+  if (velText !== lastMetricsRender.velocity) {
+    velocityEl.textContent = velText;
+    lastMetricsRender.velocity = velText;
+  }
   const velPercent = Math.min(100, (state.consumptionVelocity / 20) * 100);
-  velocityFill.style.width = velPercent + '%';
-  velocityFill.className = 'metric-fill' + (velPercent > 80 ? ' danger' : velPercent > 50 ? ' warn' : '');
+  if (velPercent !== lastMetricsRender.velPercent) {
+    velocityFill.style.width = velPercent + '%';
+    lastMetricsRender.velPercent = velPercent;
+  }
+  const velClass = 'metric-fill' + (velPercent > 80 ? ' danger' : velPercent > 50 ? ' warn' : '');
+  if (velClass !== lastMetricsRender.velClass) {
+    velocityFill.className = velClass;
+    lastMetricsRender.velClass = velClass;
+  }
 
   // Consumption limit warning at 90%
   const consumptionPercent = (state.totalConsumption / CONSUMPTION_LIMIT) * 100;
   state.isWarning = consumptionPercent > 90 && state.consumptionVelocity > 2;
-  warningEl.style.display = state.isWarning ? 'block' : 'none';
+  const warnDisplay = state.isWarning ? 'block' : 'none';
+  if (warnDisplay !== lastMetricsRender.warnDisplay) {
+    warningEl.style.display = warnDisplay;
+    lastMetricsRender.warnDisplay = warnDisplay;
+  }
 
   // Salvage pill: capacity lives in the button itself, beside the meme name
   // (never while attract/report — it stays clickable even when faded)
+  let salvageState;
   if (state.mode !== 'active') {
-    salvageBtn.classList.add('hidden');
+    salvageState = 'hidden';
   } else if (closest && state.salvageRemaining > 0 && !state.salvagedMemes.has(closest.data.id)) {
-    salvageBtn.textContent = `SALVAGE · ${state.salvageRemaining} LEFT`;
-    salvageBtn.classList.remove('hidden', 'exhausted');
+    salvageState = `on:${state.salvageRemaining}`;
   } else if (closest && state.salvageRemaining === 0) {
-    salvageBtn.textContent = 'NO SALVAGE LEFT';
-    salvageBtn.classList.remove('hidden');
-    salvageBtn.classList.add('exhausted');
+    salvageState = 'exhausted';
   } else {
-    salvageBtn.classList.add('hidden');
+    salvageState = 'hidden';
+  }
+  if (salvageState !== lastMetricsRender.salvageState) {
+    if (salvageState === 'hidden') {
+      salvageBtn.classList.add('hidden');
+    } else if (salvageState === 'exhausted') {
+      salvageBtn.textContent = 'NO SALVAGE LEFT';
+      salvageBtn.classList.remove('hidden');
+      salvageBtn.classList.add('exhausted');
+    } else {
+      salvageBtn.textContent = `SALVAGE · ${state.salvageRemaining} LEFT`;
+      salvageBtn.classList.remove('hidden', 'exhausted');
+    }
+    lastMetricsRender.salvageState = salvageState;
   }
 }
 
@@ -954,6 +1019,7 @@ salvageBtn.addEventListener('click', handleSalvage);
 // ─────────────────────────────────────────────
 let isDragging = false, lastY = 0;
 let closest = null;
+let memesInViewCount = 0; // set once per frame in animate()'s highlight loop, read by updateMetrics()
 
 window.addEventListener('wheel', e => {
   state.targetY += e.deltaY * 0.12;
@@ -1197,8 +1263,7 @@ function resetSession() {
   activeDurEl.textContent = '';
   activeSalvageEl.classList.remove('visible');
   activeDescEl.classList.remove('visible');
-  const cmContainer = document.getElementById('contemporary-memes');
-  if (cmContainer) cmContainer.classList.add('hidden');
+  if (cmContainerEl) cmContainerEl.classList.add('hidden');
 }
 
 function enterAttract() {
@@ -1271,18 +1336,59 @@ window.addEventListener('mousemove', wakeCursor);
 wakeCursor();
 
 // ─────────────────────────────────────────────
+//  FRAME TIMING — frame-rate-independent animation
+//  A struggling GPU drops to ~30fps; without this every lerp/increment below
+//  slows down along with the framerate, which reads as the whole piece
+//  sluggishly bogging down instead of just rendering fewer frames.
+// ─────────────────────────────────────────────
+let lastFrameTime = performance.now();
+// Converts a "per-60fps-frame" lerp factor k into the equivalent factor for
+// the actual elapsed dt, so lerps settle at the same real-world speed at any framerate.
+function frLerp(k, dt) { return 1 - Math.pow(1 - k, dt * 60); }
+
+// ── Adaptive quality controller ──
+// Samples real frame times and nudges renderScale (0.6–1.0) so a struggling
+// GPU trades resolution for framerate instead of just chugging.
+let fpsAccumMs = 0, fpsAccumFrames = 0;
+let lastAvgFps = 60;
+function updateAdaptiveQuality(rawDeltaMs) {
+  if (document.hidden || rawDeltaMs > 250) return; // tab switch / stall — not a real sample
+  fpsAccumMs += rawDeltaMs;
+  fpsAccumFrames++;
+  if (fpsAccumMs < 2000) return;
+  lastAvgFps = 1000 / (fpsAccumMs / fpsAccumFrames);
+  if (lastAvgFps < 45 && renderScale > 0.6) {
+    renderScale = Math.round((renderScale - 0.1) * 10) / 10;
+    renderer.setPixelRatio(basePixelRatio * renderScale);
+  } else if (lastAvgFps > 57 && renderScale < 1.0) {
+    renderScale = Math.round((renderScale + 0.1) * 10) / 10;
+    renderer.setPixelRatio(basePixelRatio * renderScale);
+  }
+  fpsAccumMs = 0;
+  fpsAccumFrames = 0;
+}
+
+// ─────────────────────────────────────────────
 //  ANIMATE
 // ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
 
-  const t = performance.now() * 0.001;
+  const now = performance.now();
+  const rawDeltaMs = now - lastFrameTime;
+  const dt = Math.min(0.05, Math.max(0.001, rawDeltaMs / 1000));
+  lastFrameTime = now;
+  updateAdaptiveQuality(rawDeltaMs);
+
+  const t = now * 0.001;
 
   const depthFactor = Math.max(0, Math.min(1, state.currentY / (TOTAL_YEARS * K_Y)));
-  const lerpFactor = 0.04 + depthFactor * 0.03;
+  const lerpFactor = frLerp(0.04 + depthFactor * 0.03, dt);
   const prevY = state.currentY;
   state.currentY = THREE.MathUtils.lerp(state.currentY, state.targetY, lerpFactor);
-  state.scrollSpeed = Math.abs(state.currentY - prevY);
+  // Normalized so existing thresholds (FOMO, dust, glitch) keep meaning
+  // "distance per 60fps-frame" regardless of actual framerate
+  state.scrollSpeed = Math.abs(state.currentY - prevY) * (0.016 / dt);
   state.excavationDepth = state.currentY;
 
   // ── Exhibition idle loop ──
@@ -1302,7 +1408,7 @@ function animate() {
   autoIndicator.classList.toggle('hidden', !(state.autoScrolling && state.mode === 'active'));
 
   if (state.autoScrolling) {
-    state.targetY += AUTO_SCROLL_SPEED * 0.016;
+    state.targetY += AUTO_SCROLL_SPEED * dt;
     if (state.targetY >= state.timeRange.max + 2) {
       state.targetY = -2;
     }
@@ -1311,7 +1417,7 @@ function animate() {
 
   // Slow pan toward the focused fossil so the label always points at something visible
   const focusTargetX = (state.mode === 'active' && lastFocusPanel) ? lastFocusPanel.mesh.position.x * 0.55 : 0;
-  camFocusX += (focusTargetX - camFocusX) * 0.02;
+  camFocusX += (focusTargetX - camFocusX) * frLerp(0.02, dt);
 
   camera.position.set(
     camFocusX + Math.sin(t * 0.1) * 0.5 + Math.sin(t * 0.3) * 0.2,
@@ -1327,16 +1433,25 @@ function animate() {
   // Linear year mapping: floor prevents flicker at boundaries
   const progress = Math.max(0, Math.min(1, state.currentY / state.landfillDepth));
   const cYear = Math.floor(START_YEAR + progress * TOTAL_YEARS);
-  currentYearEl.textContent = cYear;
-  eraLabel.textContent = getEraLabel(cYear);
-  eraLabelJp.textContent = getEraLabelJp(cYear);
+  // Year-driven DOM only touches the page when the year actually changes —
+  // this ticks a few times a minute, not every frame
+  if (cYear !== lastRenderedYear) {
+    currentYearEl.textContent = cYear;
+    eraLabel.textContent = getEraLabel(cYear);
+    eraLabelJp.textContent = getEraLabelJp(cYear);
 
-  const PX = 56;
-  const rulerOff = -((cYear - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
-  timelineRuler.style.transform = `translateX(${rulerOff}px)`;
-  document.querySelectorAll('.timeline-year-text').forEach(el => {
-    el.classList.toggle('active', el.id === `tick-year-${cYear}`);
-  });
+    const PX = 56;
+    const rulerOff = -((cYear - START_YEAR) / TOTAL_YEARS) * TOTAL_YEARS * PX;
+    timelineRuler.style.transform = `translateX(${rulerOff}px)`;
+
+    if (lastRenderedYear != null) {
+      const prevEl = tickYearEls.get(lastRenderedYear);
+      if (prevEl) prevEl.classList.remove('active');
+    }
+    const curEl = tickYearEls.get(cYear);
+    if (curEl) curEl.classList.add('active');
+    lastRenderedYear = cYear;
+  }
 
   // ── Find active meme — closest in current stratum, fallback to nearest ──
   let closestDist = Infinity;
@@ -1365,28 +1480,38 @@ function animate() {
   }
 
   // ── Highlight active panel + salvage/decay mechanics ──
+  memesInViewCount = 0;
   for (const p of memePanels) {
     const isActive = closest && p === closest;
-    const inRange = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2) < K_Y * 1.5;
+    const dist = Math.abs(state.currentY - (p.yStart + p.yEnd) / 2);
+    const inRange = dist < K_Y * 1.5;
     const isSalvaged = state.salvagedMemes.has(p.data.id);
+    if (dist < K_Y * 2) memesInViewCount++;
+
+    // Distance culling: fossils far outside fog visibility skip all lerp work.
+    // Salvaged, focused, and hover-pinned panels always stay visible.
+    p.mesh.visible = dist < K_Y * 8 || isSalvaged;
+    if (p.baseMat.userData.hoverTarget != null || p === closest) p.mesh.visible = true;
+    if (!p.mesh.visible) continue;
+
     // Contemporaries hover overrides normal opacity
     if (p.baseMat.userData.hoverTarget !== null && p.baseMat.userData.hoverTarget !== undefined) {
-      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, p.baseMat.userData.hoverTarget, 0.15);
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, p.baseMat.userData.hoverTarget, frLerp(0.15, dt));
     } else if (isSalvaged) {
       // Salvaged: permanent golden glow, immune to decay
-      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, 1.0, 0.03);
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, 1.0, frLerp(0.03, dt));
       // Subtle pulse for "immortal" status
       const pulse = 0.98 + Math.sin(t * 1.5) * 0.02;
       p.mesh.scale.setScalar(pulse);
     } else {
       // Unsalvaged: the longer a fossil has been consumed (in view), the more it
       // weathers into the stratum — only during a visitor's session
-      if (inRange && state.mode === 'active') p.viewedS += 0.016;
+      if (inRange && state.mode === 'active') p.viewedS += dt;
       const decay = Math.min(0.35, p.viewedS * 0.006);
       // Non-focused neighbours sit back (0.55) so the bracketed fossil reads as "the one"
       const targetOpacity = isActive ? 1.0 : (inRange ? Math.max(0.15, 0.55 - decay) : Math.max(0.04, 0.12 - decay));
-      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, targetOpacity, 0.04);
-      p.mesh.scale.setScalar(THREE.MathUtils.lerp(p.mesh.scale.x, isActive ? 1.06 : 1.0, 0.1));
+      p.baseMat.opacity = THREE.MathUtils.lerp(p.baseMat.opacity, targetOpacity, frLerp(0.04, dt));
+      p.mesh.scale.setScalar(THREE.MathUtils.lerp(p.mesh.scale.x, isActive ? 1.06 : 1.0, frLerp(0.1, dt)));
     }
   }
 
@@ -1399,7 +1524,7 @@ function animate() {
     v.mesh.material.opacity = THREE.MathUtils.lerp(
       v.mesh.material.opacity,
       isActive ? 0.6 : 0.25,
-      0.04
+      frLerp(0.04, dt)
     );
   }
 
@@ -1445,7 +1570,7 @@ function animate() {
     // ── Contemporaries: always update when cYear changes (even if closest is same meme) ──
     if (state.lastCY !== cYear && closest) {
       state.lastCY = cYear;
-      const cmList = document.getElementById('cm-list');
+      const cmList = cmListEl;
       if (cmList) {
         cmList.innerHTML = '';
         // Everything alive this year — long-lived memes (Pepe, Doge…) stay
@@ -1454,7 +1579,7 @@ function animate() {
           .filter(m => m.bornYear <= cYear && m.diedYear >= cYear)
           .sort((a, b) => a.bornYear - b.bornYear)
           .slice(0, 8);
-        const cmContainer = document.getElementById('contemporary-memes');
+        const cmContainer = cmContainerEl;
         if (contemporaries.length > 0) {
           cmContainer.classList.remove('hidden');
           for (const cm of contemporaries) {
@@ -1508,8 +1633,7 @@ function animate() {
       activeDurEl.textContent = '';
       activeSalvageEl.classList.remove('visible');
       activeDescEl.classList.remove('visible');
-      const cmContainer = document.getElementById('contemporary-memes');
-      if (cmContainer) cmContainer.classList.add('hidden');
+      if (cmContainerEl) cmContainerEl.classList.add('hidden');
     }
   }
 
@@ -1526,10 +1650,9 @@ function animate() {
     if (best) focusPanel = best;
   }
   lastFocusPanel = focusPanel;
-  updateFocusLink(focusPanel, t);
+  updateFocusLink(focusPanel, t, dt);
 
   // Contemporaries chip states: mark the focused one and the already-salvaged
-  const cmListEl = document.getElementById('cm-list');
   if (cmListEl) {
     for (const el of cmListEl.children) {
       el.classList.toggle('active', !!closest && el.dataset.memeId === closest.data.id);
@@ -1541,18 +1664,18 @@ function animate() {
   updateMetrics();
 
   // ── Track consumption for report ──
-  state.totalMemesConsumed += state.consumptionVelocity * 0.016;
+  state.totalMemesConsumed += state.consumptionVelocity * dt;
   if (state.autoScrolling) {
-    state.autoScrollTime += 0.016;
+    state.autoScrollTime += dt;
   } else {
-    state.activeScrollTime += 0.016;
+    state.activeScrollTime += dt;
   }
 
   // ── Ambient particles ──
   if (particles) {
     const arr = particles.geometry.attributes.position.array;
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      arr[i * 3 + 1] += Math.sin(i + t * 0.2) * 0.002;
+      arr[i * 3 + 1] += Math.sin(i + t * 0.2) * 0.002 * (dt * 60);
       if (arr[i * 3 + 1] > state.timeRange.max + 5) arr[i * 3 + 1] = -2;
       if (arr[i * 3 + 1] < -2) arr[i * 3 + 1] = state.timeRange.max + 5;
     }
@@ -1577,7 +1700,7 @@ function animate() {
     const dustArr = dustParticles.geometry.attributes.position.array;
     const dustVel = dustParticles.userData.velocities;
     const dustOpacity = Math.min(0.5, state.scrollSpeed * 2);
-    dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, dustOpacity, 0.1);
+    dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, dustOpacity, frLerp(0.1, dt));
 
     const spawnRate = Math.min(5, Math.floor(state.scrollSpeed * 3));
     for (let s = 0; s < spawnRate; s++) {
@@ -1600,7 +1723,7 @@ function animate() {
     }
     dustParticles.geometry.attributes.position.needsUpdate = true;
   } else if (dustParticles) {
-    dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, 0, 0.05);
+    dustParticles.material.opacity = THREE.MathUtils.lerp(dustParticles.material.opacity, 0, frLerp(0.05, dt));
   }
 
   updateAudio();
@@ -1618,7 +1741,20 @@ const _focusProj = new THREE.Vector3();
 let lastFocusPanel = null; // camera pans toward this fossil (1-frame lag is fine)
 let camFocusX = 0;
 
-function updateFocusLink(panel, t) {
+// memeInfo.getBoundingClientRect() forces layout — it only actually moves on
+// resize, so cache it and refresh lazily (resize handler also clears it).
+let cachedMemeInfoRect = null;
+let cachedMemeInfoRectAt = 0;
+function getMemeInfoRect() {
+  const now = performance.now();
+  if (!cachedMemeInfoRect || now - cachedMemeInfoRectAt > 500) {
+    cachedMemeInfoRect = memeInfo.getBoundingClientRect();
+    cachedMemeInfoRectAt = now;
+  }
+  return cachedMemeInfoRect;
+}
+
+function updateFocusLink(panel, t, dt) {
   const show = state.mode === 'active' && panel;
   focusBracket.visible = !!show;
   if (!show) {
@@ -1633,15 +1769,16 @@ function updateFocusLink(panel, t) {
   const targetW = geoP.width * panel.mesh.scale.x * 1.18;
   const targetH = geoP.height * panel.mesh.scale.y * 1.18;
   _focusTarget.set(panel.mesh.position.x, panel.mesh.position.y, panel.mesh.position.z + 0.08);
-  focusBracket.position.lerp(_focusTarget, 0.18);
-  focusBracket.scale.x += (targetW - focusBracket.scale.x) * 0.18;
-  focusBracket.scale.y += (targetH - focusBracket.scale.y) * 0.18;
-  focusBracket.rotation.x += (panel.mesh.rotation.x - focusBracket.rotation.x) * 0.18;
-  focusBracket.rotation.y += (panel.mesh.rotation.y - focusBracket.rotation.y) * 0.18;
-  focusBracket.rotation.z += (panel.mesh.rotation.z - focusBracket.rotation.z) * 0.18;
+  const bracketLerp = frLerp(0.18, dt);
+  focusBracket.position.lerp(_focusTarget, bracketLerp);
+  focusBracket.scale.x += (targetW - focusBracket.scale.x) * bracketLerp;
+  focusBracket.scale.y += (targetH - focusBracket.scale.y) * bracketLerp;
+  focusBracket.rotation.x += (panel.mesh.rotation.x - focusBracket.rotation.x) * bracketLerp;
+  focusBracket.rotation.y += (panel.mesh.rotation.y - focusBracket.rotation.y) * bracketLerp;
+  focusBracket.rotation.z += (panel.mesh.rotation.z - focusBracket.rotation.z) * bracketLerp;
 
   const col = uiColorFor(panel.data);
-  focusBracket.material.color.lerp(col, 0.2);
+  focusBracket.material.color.lerp(col, frLerp(0.2, dt));
   focusBracket.material.opacity = 0.75 + Math.sin(t * 2.5) * 0.2;
 
   // Leader line: bottom edge of the bracket → top of the label block
@@ -1652,7 +1789,7 @@ function updateFocusLink(panel, t) {
   const onScreen = _focusProj.z < 1;
   const x1 = (_focusProj.x * 0.5 + 0.5) * innerWidth;
   const y1 = (-_focusProj.y * 0.5 + 0.5) * innerHeight;
-  const rect = memeInfo.getBoundingClientRect();
+  const rect = getMemeInfoRect();
   const x2 = rect.left + rect.width / 2;
   const y2 = rect.top - 8;
   // Only draw while the fossil sits above the label — no upward lines
@@ -2175,6 +2312,17 @@ async function openShareOverlay() {
 
 shareBtn.addEventListener('click', openShareOverlay);
 shareCloseBtn.addEventListener('click', () => shareOverlay.classList.add('hidden'));
+
+// ── ?debug FPS meter — on-site verification of the adaptive quality controller ──
+if (location.search.includes('debug')) {
+  const dbg = document.createElement('div');
+  dbg.style.cssText = 'position:fixed;top:4px;left:4px;z-index:9999;font:11px monospace;' +
+    'color:#0f0;background:rgba(0,0,0,0.6);padding:4px 8px;pointer-events:none;white-space:pre;';
+  document.body.appendChild(dbg);
+  setInterval(() => {
+    dbg.textContent = `fps ${lastAvgFps.toFixed(0)}  scale ${renderScale.toFixed(1)}  dpr ${(basePixelRatio * renderScale).toFixed(2)}`;
+  }, 500);
+}
 
 // ── Init ──
 const glitchOverlay = new GlitchOverlay();
