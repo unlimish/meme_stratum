@@ -98,18 +98,23 @@ TIE_X        = INNER_L / 2 - TIE_INSET; // 49（ポケット端42mmより外側�
 // ---- 蓋固定用ネジボス（body側、4箇所）----
 // 小判型化により3箇所120°等配から、4隅寄り (±47, ±22) の4箇所に変更。
 // ケーブルポート（+X端中央、|y|<=7）とは干渉しない位置。
+// ネジは「家にある余りの4×10タッピングビス」（呼び径φ4・長さ10mm）を使う想定。
 BOSS_X          = 47;   // ボス中心 Xオフセット
 BOSS_Y          = 22;   // ボス中心 Yオフセット
 BOSS_POS        = [for (sx = [-1, 1]) for (sy = [-1, 1]) [sx * BOSS_X, sy * BOSS_Y]];
-BOSS_D          = 7;    // ボス外径
-BOSS_PILOT_D    = 2.7;  // M3タッピングビス用下穴径
-BOSS_PILOT_DEPTH= 8;    // 下穴深さ
+BOSS_D          = 8;    // ボス外径（φ4タッピング用に肉厚2.3mmを確保するため7→8に拡大）
+BOSS_PILOT_D    = 3.4;  // ★実測して調整★ φ4タッピングビス用下穴径（PLA/PETGで3.3〜3.5、
+                        //   きつい/入らない時は+0.2、空回りする時は-0.2して再出力）
+BOSS_PILOT_DEPTH= 8;    // 下穴深さ（10mmビスは蓋3mmを貫通してボスに約7mm噛む→8mmで受ける）
 BOSS_TOP_Z      = BODY_H - LID_LIP_H; // ボス上端Z（リム上端からリップ高さ分下げてリップと面一）
 
-// ---- 蓋のネジ通し穴（皿もみ、M3用）----
-SCREW_THRU_D  = 3.4;  // M3通し穴
-CSK_D         = 6.0;  // 皿ネジ（フラットヘッド）の皿もみ径
-CSK_DEPTH     = 1.8;  // 皿もみ深さ
+// ---- 蓋のネジ通し穴（M4＝呼び径φ4のネジ用）----
+CSK_ENABLE    = true; // 皿頭（皿タッピング）用の皿もみ。なべ頭（丸）の余りネジなら false に
+                      //   すると皿もみ無しの素通し穴になる（頭は隅で数mm上に出るが中央のノブ
+                      //   から離れているため機能・見た目とも問題ない）
+SCREW_THRU_D  = 4.5;  // φ4ネジ軸の通し穴（クリアランス）
+CSK_D         = 8.6;  // 皿頭の皿もみ径（M4皿頭 実測約φ8.4 + クリアランス）
+CSK_DEPTH     = 2.4;  // 皿もみ深さ（M4皿頭 頭高さ約2.4mm。蓋厚3mmに対し頭が面一に沈む）
 
 // ---- アセンブリプレビュー用ゴースト寸法（STLには含めない）----
 KNOB_D       = 29;   // メタルノブ K-29-6.1 外径
@@ -257,7 +262,7 @@ module strain_relief_holes() {
             cylinder(h = FLOOR + 2, r = TIE_HOLE_D / 2);
 }
 
-// 蓋固定ボス（1本）。床（FLOOR厚みのスラブ）に融合し、上からM3タッピングビス用下穴をあける。
+// 蓋固定ボス（1本）。床（FLOOR厚みのスラブ）に融合し、上からφ4タッピングビス用下穴をあける。
 // ボスは内壁面には接していないが（min_boss_wall_marginのechoを参照）、床スラブが
 // ボス・側壁・コーナーリブ全てを底面で一体化しているため強度上問題ない。
 module boss(x, y) {
@@ -323,13 +328,14 @@ module lid() {
                     cube([TAB_SLOT_W, TAB_SLOT_H, LID_LIP_H + LID_T + 2], center = true);
         }
 
-        // M3通し穴＋皿もみ（body側ボスと同じ4箇所に配置）
+        // φ4通し穴＋皿もみ（body側ボスと同じ4箇所に配置）
         for (p = BOSS_POS) {
             translate([p[0], p[1], -1])
                 cylinder(h = LID_LIP_H + LID_T + 2, r = SCREW_THRU_D / 2);
-            // 皿もみは外側（パネル上面 = ノブ側）から
-            translate([p[0], p[1], LID_LIP_H + LID_T - CSK_DEPTH])
-                cylinder(h = CSK_DEPTH + 1, r1 = SCREW_THRU_D / 2, r2 = CSK_D / 2);
+            // 皿もみは外側（パネル上面 = ノブ側）から。なべ頭ネジなら CSK_ENABLE=false で省略
+            if (CSK_ENABLE)
+                translate([p[0], p[1], LID_LIP_H + LID_T - CSK_DEPTH])
+                    cylinder(h = CSK_DEPTH + 1, r1 = SCREW_THRU_D / 2, r2 = CSK_D / 2);
         }
     }
 }
