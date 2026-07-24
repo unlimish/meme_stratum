@@ -98,18 +98,46 @@ TIE_X        = INNER_L / 2 - TIE_INSET; // 49（ポケット端42mmより外側�
 // ---- 蓋固定用ネジボス（body側、4箇所）----
 // 小判型化により3箇所120°等配から、4隅寄り (±47, ±22) の4箇所に変更。
 // ケーブルポート（+X端中央、|y|<=7）とは干渉しない位置。
+// ネジは「家にある余りの4×10タッピングビス」（呼び径φ4・長さ10mm）を使う想定。
 BOSS_X          = 47;   // ボス中心 Xオフセット
 BOSS_Y          = 22;   // ボス中心 Yオフセット
 BOSS_POS        = [for (sx = [-1, 1]) for (sy = [-1, 1]) [sx * BOSS_X, sy * BOSS_Y]];
-BOSS_D          = 7;    // ボス外径
-BOSS_PILOT_D    = 2.7;  // M3タッピングビス用下穴径
-BOSS_PILOT_DEPTH= 8;    // 下穴深さ
+BOSS_D          = 8;    // ボス外径（φ4タッピング用に肉厚2.3mmを確保するため7→8に拡大）
+BOSS_PILOT_D    = 3.4;  // ★実測して調整★ φ4タッピングビス用下穴径（PLA/PETGで3.3〜3.5、
+                        //   きつい/入らない時は+0.2、空回りする時は-0.2して再出力）
+BOSS_PILOT_DEPTH= 8;    // 下穴深さ（10mmビスは蓋3mmを貫通してボスに約7mm噛む→8mmで受ける）
 BOSS_TOP_Z      = BODY_H - LID_LIP_H; // ボス上端Z（リム上端からリップ高さ分下げてリップと面一）
 
-// ---- 蓋のネジ通し穴（皿もみ、M3用）----
-SCREW_THRU_D  = 3.4;  // M3通し穴
-CSK_D         = 6.0;  // 皿ネジ（フラットヘッド）の皿もみ径
-CSK_DEPTH     = 1.8;  // 皿もみ深さ
+// ---- 蓋のネジ通し穴（M4＝呼び径φ4のネジ用）----
+CSK_ENABLE    = true; // 皿頭（皿タッピング）用の皿もみ。なべ頭（丸）の余りネジなら false に
+                      //   すると皿もみ無しの素通し穴になる（頭は隅で数mm上に出るが中央のノブ
+                      //   から離れているため機能・見た目とも問題ない）
+SCREW_THRU_D  = 4.5;  // φ4ネジ軸の通し穴（クリアランス）
+CSK_D         = 8.6;  // 皿頭の皿もみ径（M4皿頭 実測約φ8.4 + クリアランス）
+CSK_DEPTH     = 2.4;  // 皿もみ深さ（M4皿頭 頭高さ約2.4mm。蓋厚3mmに対し頭が面一に沈む）
+
+// ---- 天板サイドのタクトスイッチ取り付け（左右2個）----
+// ノブの左右に、ありふれた6×6mm・上面操作・4脚スルーホールタイプのタクトスイッチ
+//（高さ約5mm、丸ボタン径約φ3.5mm）を後付けできる座を設ける。まだ現物合わせしていない
+// ため、寸法は全て ★実測して調整★ 前提の概算値。蓋裏からスイッチ本体をポケットに落とし
+// 込み、ボタンだけを天板の穴から出す方式（抜け止めは組み立て時にホットボンド等で対応）。
+SW_ENABLE     = true;   // 天板左右のタクトスイッチ用の穴・ポケットを出力するか
+SW_X          = 35;     // ★実測して調整★ スイッチ中心の中心からのXオフセット（左右対称に2個）
+SW_POS        = [[SW_X, 0], [-SW_X, 0]];
+SW_BODY       = 6.2;    // ★実測して調整★ タクトスイッチ本体の一辺（標準6×6に+クリアランス）
+SW_BTN_D      = 4.5;    // ★実測して調整★ 天板ボタン穴径（ボタンφ3.5+押しクリアランス）
+SW_POCKET_CLR = 0.4;    // 本体ポケットの片側クリアランス（脚の逃げ込み）
+SW_POCKET     = SW_BODY + 2 * SW_POCKET_CLR; // 裏側の本体収納ポケット一辺（7.0）
+SW_TOP_WALL   = 1.0;    // 天板上面〜ポケット天井までの残し厚（ここにボタン穴が開く）
+SW_BOSS_H     = 2.0;    // 蓋裏に追加する肉盛りボスの高さ（3mm蓋だけでは浅いので深さを稼ぐ）
+SW_BOSS_WALL  = 1.6;    // ポケット周囲のボス肉厚
+SW_BOSS_FOOT  = SW_POCKET + 2 * SW_BOSS_WALL; // ボス外形一辺（10.2）
+
+// ポケットのZ範囲（lidローカル座標。z=0がリップ先端、z=LID_LIP_Hがパネル下面）。
+// ボス下端(=ポケット開口部)からポケット天井（天板残し厚SW_TOP_WALLの下端）までがポケット深さ。
+SW_POCKET_Z0    = LID_LIP_H - SW_BOSS_H;             // ポケット開口部Z（ボス下端）
+SW_POCKET_Z1    = (LID_LIP_H + LID_T) - SW_TOP_WALL; // ポケット天井Z
+SW_POCKET_DEPTH = SW_POCKET_Z1 - SW_POCKET_Z0;       // ポケット深さ（≈4mm、スイッチ本体高さ約3.5mmを収納）
 
 // ---- アセンブリプレビュー用ゴースト寸法（STLには含めない）----
 KNOB_D       = 29;   // メタルノブ K-29-6.1 外径
@@ -176,6 +204,41 @@ assert(min_boss_pocket_margin > 0, "ネジボスがブレッドボードポケ�
 assert(port_boss_margin > 0, "ケーブルポートがネジボスと干渉している！PORT_W/BOSS_Yを見直すこと");
 assert(tie_pocket_margin > 0, "結束バンド穴がブレッドボードポケットと干渉している！TIE_INSET/TIE_HOLE_Dを見直すこと");
 assert(BODY_H + LID_T <= 60, "総高さが60mmを超えている！BODY_Hを見直すこと");
+
+// ---- 天板サイドのタクトスイッチの干渉チェック ----
+sw_boss_halfwidth = SW_BOSS_FOOT / 2;             // ボス外形の半幅（5.1）
+sw_boss_halfdiag  = sw_boss_halfwidth * sqrt(2);   // ボス外形の半対角長（角同士の干渉判定用、7.21）
+
+sw_knob_margins = [for (p = SW_POS) abs(p[0]) - SW_BTN_D / 2 - KNOB_D / 2];
+min_sw_knob_margin = min(sw_knob_margins); // ボタン穴〜中央ノブのXギャップ
+
+sw_screw_boss_margins = [for (s = SW_POS) for (b = BOSS_POS)
+    norm([b[0] - s[0], b[1] - s[1]]) - (sw_boss_halfdiag + BOSS_D / 2)];
+min_sw_screw_boss_margin = min(sw_screw_boss_margins); // スイッチボス〜蓋ネジボスの最小ギャップ
+
+sw_center_margins = [for (p = SW_POS) abs(p[0]) - sw_boss_halfwidth - (BUSHING_HOLE_D / 2 + 3)];
+min_sw_center_margin = min(sw_center_margins); // スイッチボス〜中央エンコーダー金具のXギャップ（3mmはタブ/ナット逃げ）
+
+sw_pocket_rib_margins = [for (p = SW_POS) POCKET_HX - (abs(p[0]) + sw_boss_halfwidth)];
+min_sw_pocket_rib_margin = min(sw_pocket_rib_margins); // スイッチボス〜ブレッドボードポケット隅(x)のXギャップ
+
+echo(str("--- 天板サイドのタクトスイッチ (SW_ENABLE=", SW_ENABLE, ") ---"));
+echo(str("スイッチ中心 = (±", SW_X, ", 0)mm、ボタン穴 = φ", SW_BTN_D,
+    "、本体ポケット = ", SW_POCKET, "mm角、ボス外形 = ", SW_BOSS_FOOT, "mm角"));
+echo(str("ポケット深さ = ", SW_POCKET_DEPTH, "mm（z=", SW_POCKET_Z0, "〜", SW_POCKET_Z1,
+    "、天板残し厚 ", SW_TOP_WALL, "mm）"));
+echo(str("ボタン穴〜中央ノブのXギャップ = ", min_sw_knob_margin, " mm（要 > 0）"));
+echo(str("スイッチボス〜蓋ネジボスの最小ギャップ = ", min_sw_screw_boss_margin, " mm（要 > 0）"));
+echo(str("スイッチボス〜中央エンコーダー金具のXギャップ = ", min_sw_center_margin, " mm（要 > 0、タブ/ナット逃げ3mm込み）"));
+echo(str("スイッチボス〜ブレッドボードポケット隅(x=", POCKET_HX, ")のXギャップ = ", min_sw_pocket_rib_margin,
+    " mm（要 > 0。ただしスイッチボスはz=", SW_POCKET_Z0, "〜", LID_LIP_H,
+    "mm＝リップの範囲内に収まりbody内部のリブ（絶対z=", FLOOR, "〜", FLOOR + RIB_H,
+    "mm付近）とは高さがそもそも重ならないため、これはSW_BOSS_H拡大時に備えた安全マージン確認）"));
+
+assert(min_sw_knob_margin > 0, "タクトスイッチのボタン穴が中央ノブと干渉している！SW_X/SW_BTN_D/KNOB_Dを見直すこと");
+assert(min_sw_screw_boss_margin > 0, "タクトスイッチのボスが蓋のネジボスと干渉している！SW_X/SW_BOSS_FOOT/BOSS_X/BOSS_Yを見直すこと");
+assert(min_sw_center_margin > 0, "タクトスイッチのボスが中央のエンコーダー金具（ブッシュ/タブ/ナット）と干渉している！SW_Xを見直すこと");
+assert(min_sw_pocket_rib_margin > 0, "タクトスイッチのボスがブレッドボードポケット隅を越えている！SW_X/SW_BOSS_FOOTを見直すこと");
 
 // ----------------------------------------------------------------------------
 // 共通モジュール
@@ -257,7 +320,7 @@ module strain_relief_holes() {
             cylinder(h = FLOOR + 2, r = TIE_HOLE_D / 2);
 }
 
-// 蓋固定ボス（1本）。床（FLOOR厚みのスラブ）に融合し、上からM3タッピングビス用下穴をあける。
+// 蓋固定ボス（1本）。床（FLOOR厚みのスラブ）に融合し、上からφ4タッピングビス用下穴をあける。
 // ボスは内壁面には接していないが（min_boss_wall_marginのechoを参照）、床スラブが
 // ボス・側壁・コーナーリブ全てを底面で一体化しているため強度上問題ない。
 module boss(x, y) {
@@ -295,6 +358,40 @@ module body() {
     }
 }
 
+// タクトスイッチ用の裏側肉盛りボス（1個分）。パネル下面（z=LID_LIP_H）からさらに
+// SW_BOSS_H分だけbody内部側（z減少方向）へ角柱を追加し、後で sw_cut() が刳り抜く
+// ポケット・ボタン穴の深さを稼ぐ。
+// ★重要（印刷向き確認）★ 位置決めリップは中心部まで含めた全面ソリッド（perimeterの
+// リングではない）なので、SW_X±SW_BOSS_FOOT/2の範囲はもともとz=0〜LID_LIP_Hが埋まって
+// いる。デフォルト値ではSW_BOSS_H(2.0)=LID_LIP_H(2.0)なので、このボスの下端はちょうど
+// リップ先端z=0に一致し、リップの外に出っ張ることはない（既に埋まっている領域へのunionで
+// 実質ノーオペレーションだが、SW_BOSS_HをLID_LIP_Hより大きくした場合に備え明示的に確保する）。
+module sw_boss(x, y) {
+    translate([x - SW_BOSS_FOOT / 2, y - SW_BOSS_FOOT / 2, LID_LIP_H - SW_BOSS_H])
+        cube([SW_BOSS_FOOT, SW_BOSS_FOOT, SW_BOSS_H]);
+}
+
+module all_sw_bosses() {
+    if (SW_ENABLE)
+        for (p = SW_POS) sw_boss(p[0], p[1]);
+}
+
+// タクトスイッチ用の切削（1個分）＝裏側の本体ポケット（角穴）＋天板のボタン穴。
+module sw_cut(x, y) {
+    // 本体ポケット（裏から見た角穴、SW_POCKET角）
+    translate([x - SW_POCKET / 2, y - SW_POCKET / 2, SW_POCKET_Z0])
+        cube([SW_POCKET, SW_POCKET, SW_POCKET_DEPTH]);
+    // ボタン穴（天板残し厚SW_TOP_WALLを貫通）。ポケット天井と0.1mm重ねてCGAL上の
+    // 面一致（ゼロ厚差分）による非manifold化を避ける。
+    translate([x, y, SW_POCKET_Z1 - 0.1])
+        cylinder(h = (LID_LIP_H + LID_T + 1) - (SW_POCKET_Z1 - 0.1), r = SW_BTN_D / 2);
+}
+
+module all_sw_cuts() {
+    if (SW_ENABLE)
+        for (p = SW_POS) sw_cut(p[0], p[1]);
+}
+
 // ----------------------------------------------------------------------------
 // lid（蓋）
 // 座標系: z=0 がリップ先端（body内部に差し込まれる側）、
@@ -310,6 +407,8 @@ module lid() {
             translate([0, 0, LID_LIP_H])
                 linear_extrude(height = LID_T)
                     oblong2d(CASE_L, CASE_W, CORNER_R);
+            // 天板左右のタクトスイッチ用ボス（後付け穴を省略するSW_ENABLE=falseなら出力しない）
+            all_sw_bosses();
         }
 
         // エンコーダーブッシュ通し穴（ケース中心、全高貫通）
@@ -323,15 +422,29 @@ module lid() {
                     cube([TAB_SLOT_W, TAB_SLOT_H, LID_LIP_H + LID_T + 2], center = true);
         }
 
-        // M3通し穴＋皿もみ（body側ボスと同じ4箇所に配置）
+        // φ4通し穴＋皿もみ（body側ボスと同じ4箇所に配置）
         for (p = BOSS_POS) {
             translate([p[0], p[1], -1])
                 cylinder(h = LID_LIP_H + LID_T + 2, r = SCREW_THRU_D / 2);
-            // 皿もみは外側（パネル上面 = ノブ側）から
-            translate([p[0], p[1], LID_LIP_H + LID_T - CSK_DEPTH])
-                cylinder(h = CSK_DEPTH + 1, r1 = SCREW_THRU_D / 2, r2 = CSK_D / 2);
+            // 皿もみは外側（パネル上面 = ノブ側）から。なべ頭ネジなら CSK_ENABLE=false で省略
+            if (CSK_ENABLE)
+                translate([p[0], p[1], LID_LIP_H + LID_T - CSK_DEPTH])
+                    cylinder(h = CSK_DEPTH + 1, r1 = SCREW_THRU_D / 2, r2 = CSK_D / 2);
         }
+
+        // 天板左右のタクトスイッチ用の本体ポケット＋ボタン穴
+        all_sw_cuts();
     }
+}
+
+// タクトスイッチのゴースト形状（プレビュー専用、想定する現物のおおよその外形。
+// 6×6×3.5mmの本体＋φ3.5×2mmの丸ボタンで、本体上面がポケット天井に突き当たる位置に置く。
+// lidローカル座標（z=0がリップ先端）で定義し、assembly()側でlidと同じオフセットを与える。
+module sw_ghost(x, y) {
+    translate([x - 3, y - 3, SW_POCKET_Z1 - 3.5])
+        cube([6, 6, 3.5]);
+    translate([x, y, SW_POCKET_Z1])
+        cylinder(h = 2, r = 3.5 / 2);
 }
 
 // ----------------------------------------------------------------------------
@@ -361,6 +474,13 @@ module assembly() {
     pico_x0 = BB_W / 2 - PICO_EDGE_GAP - PICO_W;
     %translate([pico_x0, -PICO_D / 2, FLOOR + BB_GHOST_H + PICO_PIN_H])
         cube([PICO_W, PICO_D, PICO_H]);
+
+    // ゴースト: 天板左右のタクトスイッチ（後付け想定。現状のファームでは機能未実装）
+    if (SW_ENABLE) {
+        for (p = SW_POS)
+            %translate([0, 0, BODY_H - LID_LIP_H + EXPLODE_Z])
+                sw_ghost(p[0], p[1]);
+    }
 }
 
 // ----------------------------------------------------------------------------
