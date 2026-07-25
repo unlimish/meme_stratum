@@ -1093,9 +1093,17 @@ function clampY() {
 // ─────────────────────────────────────────────
 //  WEB SERIAL
 // ─────────────────────────────────────────────
+// A failed connection keeps the indicator up this long so the visitor can read it
+const SERIAL_ERROR_LINGER_MS = 8000;
+let serialErrorUntil = 0;
+
 async function initSerial() {
   if (!('serial' in navigator)) {
+    // Safari/Firefox have no Web Serial — say so instead of failing silently
     serialStatus.textContent = 'UNSUPPORTED';
+    serialIndicator.classList.remove('hidden');
+    serialErrorUntil = performance.now() + SERIAL_ERROR_LINGER_MS;
+    setTimeout(() => serialIndicator.classList.add('hidden'), SERIAL_ERROR_LINGER_MS);
     return;
   }
   try {
@@ -1118,7 +1126,21 @@ async function initSerial() {
         if (!isNaN(v)) { state.targetY += v * 3; clampY(); }
       }
     }
-  } catch (e) { console.warn('Serial:', e); }
+  } catch (e) {
+    // Surface the failure on screen — on the exhibit machine there's no console
+    // to check, and a silent no-op is indistinguishable from a dead button.
+    console.warn('Serial:', e);
+    state.isSerialConnected = false;
+    serialDot.classList.remove('active');
+    serialStatus.textContent = 'FAILED';
+    serialIndicator.classList.remove('hidden');
+    // Hold it long enough to be read (the 3s auto-hide would swallow it), then
+    // let the indicator disappear so the piece returns to its uncluttered state.
+    serialErrorUntil = performance.now() + SERIAL_ERROR_LINGER_MS;
+    setTimeout(() => {
+      if (!state.isSerialConnected) serialIndicator.classList.add('hidden');
+    }, SERIAL_ERROR_LINGER_MS);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1217,9 +1239,10 @@ function startExperience() {
   ambientMetrics.classList.remove('hidden');
   initAudio();
   resetIdleTimer();
-  // Auto-hide serial indicator if never connects
+  // Auto-hide serial indicator if never connects — unless a connection error is
+  // currently on screen, which owns the indicator until it expires
   setTimeout(() => {
-    if (!state.isSerialConnected) {
+    if (!state.isSerialConnected && performance.now() > serialErrorUntil) {
       serialIndicator.classList.add('hidden');
     }
   }, 3000);
@@ -1314,8 +1337,14 @@ function ensureAudioRunning() {
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 }
 for (const ev of ['mousedown', 'keydown', 'wheel', 'touchstart']) {
-  window.addEventListener(ev, () => {
+  window.addEventListener(ev, (e) => {
     ensureAudioRunning();
+    // The overlay's own buttons run their own handlers — starting the session from
+    // this capture-phase listener would hide the overlay mid-gesture, and the
+    // hidden overlay's pointer-events:none then swallows the click that never
+    // reaches the button (that's how the serial picker silently never opened).
+    const t = e.target;
+    if (t && t.closest && t.closest('#connect-btn, #serial-btn')) return;
     if (state.mode === 'attract') startExperience();
   }, { capture: true, passive: true });
 }
