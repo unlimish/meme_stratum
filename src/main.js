@@ -2353,9 +2353,38 @@ if (location.search.includes('debug')) {
   }, 500);
 }
 
+// ── WebGL unavailable: say so instead of dying half-initialised ──
+// Without this the thrown context error kills the rest of init, leaving the
+// title overlay clickable and a frozen HUD behind it — indistinguishable from
+// "the piece is broken". Usually it's the browser's hardware acceleration.
+function showWebglFailure() {
+  hud.classList.add('hidden');
+  memeInfo.classList.add('hidden');
+  metricsPanel.classList.add('hidden');
+  ambientMetrics.classList.add('hidden');
+  timelineWrapper.classList.add('hidden');
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;' +
+    'align-items:center;justify-content:center;gap:18px;text-align:center;padding:40px;' +
+    'background:#12100d;color:#e8e0d8;font-family:Inter,sans-serif;';
+  el.innerHTML =
+    '<div style="font-size:0.7rem;letter-spacing:0.3em;color:#ffcc66">WEBGL UNAVAILABLE</div>' +
+    '<div style="font-size:1.1rem;font-weight:300">このブラウザで 3D 描画を開始できませんでした</div>' +
+    '<div style="font-size:0.8rem;line-height:2;color:rgba(232,224,216,0.6);max-width:620px">' +
+    'Chrome の設定 →「システム」→「ハードウェア アクセラレーションが使用可能な場合は使用する」を<br>' +
+    'オンにして再起動すると解決します（<span style="color:#e8e0d8">chrome://gpu</span> で状態を確認できます）。<br>' +
+    'Firefox / Safari など別のブラウザでも動作します。</div>';
+  document.body.appendChild(el);
+}
+
 // ── Init ──
 const glitchOverlay = new GlitchOverlay();
-initThree();
-buildTimeline();
-enterAttract();
-animate();
+try {
+  initThree();
+  buildTimeline();
+  enterAttract();
+  animate();
+} catch (err) {
+  console.error('Meme Stratum init failed:', err);
+  showWebglFailure();
+}
