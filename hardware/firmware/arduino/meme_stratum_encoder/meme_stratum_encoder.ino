@@ -10,7 +10,11 @@
 //   ロータリー A相 → GP2
 //   ロータリー B相 → GP3
 //   ロータリー COM → GND（Pico の 3番ピン等）
-//   （押しスイッチは今回未使用）
+//
+// 動作確認（ブラウザに繋ぐ前に IDE だけで確認できる）:
+//   ツール > シリアルモニタ を開き（115200 baud）、ノブを回す。
+//   0.50 / -0.50 のような数値が流れれば正常。ブラウザからも同じデータが読める。
+//   ※ブラウザで接続する前にシリアルモニタは必ず閉じること（ポートは1つのアプリ専有）
 //
 // 導入（Arduino IDE）:
 //   1. 環境設定 > 追加のボードマネージャURL に
@@ -18,7 +22,6 @@
 //   2. ボードマネージャで "Raspberry Pi Pico/RP2040" (by Earle Philhower) をインストール
 //   3. ツール > ボード > "Raspberry Pi Pico W" を選択
 //   4. Pico W を USB 接続（初回は BOOTSEL 押しながら挿すと確実）してポートを選び、書き込み
-//   5. Web側の「SERIAL 接続」ボタンから Pico W のポートを選ぶ
 // ============================================================================
 
 // ── 配線ピン ──
@@ -32,66 +35,57 @@ const double STEP = 0.5;
 
 // スクロール方向。回す向きと掘る向きが逆なら -1 にする（配線A/Bの入れ替えでも可）。
 const int DIRECTION = 1;
+
+// 1detent あたりのクアドラチャ・カウント数。24detent型の一般的な個体は 4。
+// カチッと1回で動きすぎる場合は 4 のまま STEP を下げる。逆に、何回か回さないと
+// 動かない/取りこぼす個体は 2 や 1 にする（歯抜けの信号でも拾えるようになる）。
+const int32_t COUNTS_PER_DETENT = 4;
 // ────────────────────────────────────────────────────────────────
 
-// ── チャタリング耐性のあるステートマシン型デコーダ ──
-// Ben Buxton方式のフルステップ・ステートテーブル。1detentの完全な遷移が
-// 成立した時だけ CW/CCW を1回出力し、途中のバウンスや中間停止では動かない
-// （＝止めている間に勝手にスクロールしない）。外部ライブラリ不要。
-#define R_START     0x0
-#define R_CW_FINAL  0x1
-#define R_CW_BEGIN  0x2
-#define R_CW_NEXT   0x3
-#define R_CCW_BEGIN 0x4
-#define R_CCW_FINAL 0x5
-#define R_CCW_NEXT  0x6
-
-#define DIR_NONE 0x0
-#define DIR_CW   0x10
-#define DIR_CCW  0x20
-
-const uint8_t ttable[7][4] = {
-  {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},            // R_START
-  {R_CW_NEXT,  R_START,     R_CW_FINAL,  R_START | DIR_CW},   // R_CW_FINAL
-  {R_CW_NEXT,  R_CW_BEGIN,  R_START,     R_START},            // R_CW_BEGIN
-  {R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START},            // R_CW_NEXT
-  {R_CCW_NEXT, R_START,     R_CCW_BEGIN, R_START},            // R_CCW_BEGIN
-  {R_CCW_NEXT, R_CCW_FINAL, R_START,     R_START | DIR_CCW},  // R_CCW_FINAL
-  {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START},            // R_CCW_NEXT
+// ── クアドラチャ・デコーダ（飛び・バウンスに強い方式）──
+// 「前回のAB」と「今回のAB」の組み合わせから増減を引くテーブル。
+// 厳密な状態機械と違い、接点バウンスで状態が飛んでも停止せず、
+// 不正な遷移（AとBが同時に変化）は 0 として捨てて次から復帰する。
+//   index = (前回AB << 2) | 今回AB
+const int8_t QEM[16] = {
+   0, -1,  1,  0,
+   1,  0,  0, -1,
+  -1,  0,  0,  1,
+   0,  1, -1,  0
 };
 
-volatile uint8_t state = R_START;
-volatile long position = 0;   // detent単位の累積位置（ISRで更新）
-long lastPosition = 0;
+volatile int32_t rawCount = 0;  // クアドラチャの生カウント（ISRで更新）
+volatile uint8_t prevAB = 0;
 
-// 両ピンの変化割り込みから呼ぶ。1detent成立で position を ±1 する。
 void encoderISR() {
-  uint8_t pinstate = (digitalRead(PIN_B) << 1) | digitalRead(PIN_A);
-  state = ttable[state & 0x0f][pinstate];
-  uint8_t result = state & 0x30;
-  if (result == DIR_CW) position++;
-  else if (result == DIR_CCW) position--;
+  uint8_t ab = (digitalRead(PIN_A) << 1) | digitalRead(PIN_B);
+  rawCount += QEM[(prevAB << 2) | ab];
+  prevAB = ab;
 }
 
 void setup() {
-  Serial.begin(115200);          // USB CDC（Web Serialが接続する）
+  Serial.begin(115200);          // USB CDC（Web Serial / シリアルモニタが接続する）
   pinMode(PIN_A, INPUT_PULLUP);  // COMをGNDに落とす配線なので内蔵プルアップを使用
   pinMode(PIN_B, INPUT_PULLUP);
+  prevAB = (digitalRead(PIN_A) << 1) | digitalRead(PIN_B);
   attachInterrupt(digitalPinToInterrupt(PIN_A), encoderISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_B), encoderISR, CHANGE);
 }
 
 void loop() {
-  long pos;
+  int32_t counts;
   noInterrupts();
-  pos = position;
+  counts = rawCount;
   interrupts();
 
-  long delta = pos - lastPosition;
-  if (delta != 0) {
+  // detent単位に丸めて送る。端数は次回に持ち越すので、ゆっくり回しても取りこぼさない
+  int32_t detents = counts / COUNTS_PER_DETENT;
+  if (detents != 0) {
+    noInterrupts();
+    rawCount -= detents * COUNTS_PER_DETENT;
+    interrupts();
     // 動いた分だけ送信（Web: targetY += v * 3）
-    Serial.println((double)delta * STEP * DIRECTION);
-    lastPosition = pos;
+    Serial.println((double)detents * STEP * DIRECTION, 2);
   }
-  delay(5);
+  delay(2);
 }
