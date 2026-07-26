@@ -1123,7 +1123,18 @@ async function initSerial() {
       const lines = buf.split('\n'); buf = lines.pop();
       for (const l of lines) {
         const v = parseFloat(l.trim());
-        if (!isNaN(v)) { state.targetY += v * 3; clampY(); }
+        if (!isNaN(v)) {
+          state.targetY += v * 3;
+          state.selectedMeme = null; // navigating by knob releases a pinned focus
+          clampY();
+          if (v !== 0) {
+            // The knob is a visitor input like any other: it has to start a
+            // session from attract and keep the idle timers at bay, or the
+            // auto-scroll takes over mid-dig and the knob feels dead.
+            if (state.mode === 'attract') startExperience();
+            resetIdleTimer();
+          }
+        }
       }
     }
   } catch (e) {
